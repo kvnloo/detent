@@ -76,7 +76,7 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
         translationY = (1 - rise.value) * 8f * u.k
     }
 
-    // The feel step has one more row of chips.
+    // The feel step has controls and two document actions.
     val controlsY = u.navY - if (step == Step.FEEL) 218f else 170f
     Box(Modifier.fillMaxSize()) {
         if (step == Step.APPS) Box(Modifier.fillMaxSize().background(pal.veil))
@@ -144,6 +144,10 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
                     Row(horizontalArrangement = gap) {
                         Chip("voice", s.voice, pal, { s.toggleVoice() })
                         Chip("web search", s.webSearch, pal, { s.toggleWebSearch() })
+                    }
+                    Row(horizontalArrangement = gap) {
+                        Chip("export settings", false, pal, { s.exportSettings() })
+                        Chip("import settings", false, pal, { s.importSettings() })
                     }
                 }
                 Step.READY -> if (!s.isHome) Row(Modifier.padding(top = u.dp(42f))) {

@@ -35,6 +35,28 @@ class Prefs(ctx: Context) {
 
     fun savePos(pos: Int) = sp.edit { putInt("pos", pos) }
 
+    /** Apply an imported setup as one preferences transaction. Local wallpaper files are left alone. */
+    fun restore(data: SettingsData, cfg: Cfg, keys: Set<String>) = sp.edit {
+        putBoolean("done", true)
+        putInt("layout", cfg.layout)
+        putInt("theme", cfg.theme)
+        putString("side", if (cfg.side == Side.Left) "left" else "right")
+        putStringSet("apps", HashSet(keys))
+        putInt("pos", 0)
+        putString("quicks", data.quick.joinToString("\n") { it.key + "\t" + (it.icon ?: "") })
+        remove("quick")
+        remove("quickIcon")
+        putString("recent", data.recent.joinToString("\n"))
+        putBoolean("sound", data.sound)
+        putBoolean("haptics", data.haptics)
+        putBoolean("dots", data.dots)
+        putBoolean("lockWall", data.lockWall)
+        putBoolean("ownBar", data.ownBar)
+        putBoolean("voice", data.voice)
+        putBoolean("webSearch", data.webSearch)
+        remove("appliedWall")
+    }
+
     var sound: Boolean
         get() = sp.getBoolean("sound", true)
         set(v) = sp.edit { putBoolean("sound", v) }
