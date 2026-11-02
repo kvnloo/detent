@@ -118,7 +118,10 @@ class MainActivity : ComponentActivity(), Host {
         if (home && alreadyHome) state.onHome()
     }
 
+    private val redraw: () -> Unit = { runOnUiThread { recreate() } }
+
     override fun onDestroy() {
+        Synced.listeners -= redraw
         stopHearing()
         repo.stop()
         state.release()
