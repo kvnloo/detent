@@ -969,6 +969,8 @@ class LauncherState(
     private fun syncWallpaper() {
         if (!lockWall) return
         val grid = layout.grid
+        // The synced theme keeps whatever the system wallpaper is (for example a live wallpaper).
+        if (Synced.isSystemWall(THEMES[cfg.theme]) && !grid && customWall == null) return
         val custom = if (grid) null else customWall
         val key = "${THEMES[cfg.theme].name}|${cfg.side}|${if (grid) "grid" else custom ?: "theme"}"
         if (prefs.appliedWall == key) return

@@ -184,7 +184,7 @@ private fun Home(s: LauncherState) {
     }
 
     Box(
-        Modifier.fillMaxSize().background(bg)
+        Modifier.fillMaxSize().background(if (THEMES[wall].wall == app.detent.launcher.Synced.SYSTEM_WALL && s.customWall == null && !s.layout.grid) androidx.compose.ui.graphics.Color.Transparent else bg)
             .focusRequester(focus).focusable()
             .onKeyEvent { it.type == KeyEventType.KeyDown && s.key(it.key) },
     ) {
@@ -264,9 +264,12 @@ private fun Wallpaper(t: ThemeDef, pal: Palette, left: Boolean, custom: String?)
         HandArt(pal, left)
         return
     }
-    val img = rememberAsset(if (custom == null && left && t.wallLeft != null) t.wallLeft else wall)
-    Crossfade(img, animationSpec = tween(450), label = "wall") { p ->
-        if (p != null) Image(p.second, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+    // The synced theme draws only the shade; the system (live) wallpaper shows through the window.
+    if (wall != app.detent.launcher.Synced.SYSTEM_WALL) {
+        val img = rememberAsset(if (custom == null && left && t.wallLeft != null) t.wallLeft else wall)
+        Crossfade(img, animationSpec = tween(450), label = "wall") { p ->
+            if (p != null) Image(p.second, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
     }
     val b = pal.bg
     Box(

@@ -82,6 +82,11 @@ class MainActivity : ComponentActivity(), Host {
         enableEdgeToEdge(bars, bars)
         super.onCreate(savedInstanceState)
         window.isNavigationBarContrastEnforced = false
+        Synced.load(applicationContext)
+        Synced.listeners += redraw
+        // Lets a live wallpaper show behind the synced theme. Other themes paint over it.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+        window.setBackgroundDrawableResource(android.R.color.transparent)
         repo = AppsRepository(applicationContext)
         state = LauncherState(this, repo, Prefs(applicationContext), Feedback(applicationContext), scope)
         repo.start()

@@ -105,7 +105,7 @@ private fun phone(name: String, light: Boolean, bg: Long, fg: Long, acc: Long, h
 private fun omarchy(name: String, light: Boolean, bg: Long, fg: Long, acc: Long) =
     ThemeDef(name, "omarchy", light, bg, fg, acc, "walls/$name.webp")
 
-val THEMES = listOf(
+val THEMES: MutableList<ThemeDef> = mutableListOf(
     phone("dusk", false, 0xFF1D2021, 0xFFEBDBB2, 0xFFFE8019, 0xFF504945),
     phone("ember", false, 0xFF000000, 0xFFEBE5DC, 0xFFDF6124, 0xFF3A3733),
     phone("signal", false, 0xFF000000, 0xFFFFFFFF, 0xFFFF453A, 0xFF3A3A3A),
@@ -136,6 +136,8 @@ val THEMES = listOf(
     omarchy("tokyo-night", false, 0xFF1A1B26, 0xFFA9B1D6, 0xFF7AA2F7),
     ThemeDef("vantablack", "omarchy", false, 0xFF000000, 0xFFFFFFFF, 0xFF8D8D8D, null, 0xFF505050),
     omarchy("white", true, 0xFFFFFFFF, 0xFF000000, 0xFF6E6E6E),
+    // Colours from the desktop theme; see Synced. Defaults match groot's pywal palette.
+    Synced.theme(0xFF181F23, 0xFFD1DEDA, 0xFFC8BE72),
 )
 
 val THEME_NAMES = THEMES.map { it.name }
@@ -171,7 +173,7 @@ class Palette(t: ThemeDef) {
     val chipBg = bg.copy(alpha = .5f)
 }
 
-val PALETTES = THEMES.map { Palette(it) }
+val PALETTES: MutableList<Palette> = THEMES.mapTo(mutableListOf()) { Palette(it) }
 
 /**
  * Colour matrix for the dot-hand art. The art is white dots on black. The dots take the hand colour and the

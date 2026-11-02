@@ -48,6 +48,16 @@
             </intent-filter>
         </activity>
 
+        <!-- Colours for the synced theme, sent from a desktop over adb. -->
+        <receiver
+            android:name=".ColorsReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="app.detent.launcher.SET_COLORS" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".UnreadService"
             android:exported="true"
