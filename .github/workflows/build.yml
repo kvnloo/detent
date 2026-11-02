@@ -51,8 +51,9 @@ jobs:
           DETENT_KEYSTORE_PASSWORD: ${{ secrets.DETENT_KEYSTORE_PASSWORD }}
           DETENT_KEY_ALIAS: ${{ secrets.DETENT_KEY_ALIAS }}
           DETENT_KEY_PASSWORD: ${{ secrets.DETENT_KEY_PASSWORD }}
+          DETENT_ID: app.detent.launcher.hypr
         run: |
-          ./gradlew assembleRelease -PdetentVersion="$VERSION" -PdetentCode="$GITHUB_RUN_NUMBER"
+          ./gradlew assembleRelease -PdetentVersion="$VERSION" -PdetentCode="$GITHUB_RUN_NUMBER" ${DETENT_ID:+-PdetentId=$DETENT_ID}
           cp app/build/outputs/apk/release/app-release.apk detent.apk
 
       - uses: actions/upload-artifact@v4
