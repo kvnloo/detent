@@ -184,7 +184,7 @@ private fun Home(s: LauncherState) {
     }
 
     Box(
-        Modifier.fillMaxSize().background(if (THEMES[wall].wall == app.detent.launcher.Synced.SYSTEM_WALL && s.customWall == null && !s.layout.grid) androidx.compose.ui.graphics.Color.Transparent else bg)
+        Modifier.fillMaxSize().background(if (THEMES[wall].wall == app.detent.launcher.Synced.SYSTEM_WALL && (s.customWall == null || s.layout.grid)) bg.copy(alpha = if (s.layout.grid) .45f else 0f) else bg)
             .focusRequester(focus).focusable()
             .onKeyEvent { it.type == KeyEventType.KeyDown && s.key(it.key) },
     ) {
