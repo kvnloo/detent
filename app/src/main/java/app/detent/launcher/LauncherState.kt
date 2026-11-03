@@ -1122,7 +1122,7 @@ class LauncherState(
     }
 
     /** Picks a starting look. The haptics come from the control that picked it. */
-    fun setGlass(g: Glass) {
+    fun pickGlass(g: Glass) {
         glass = g
         g.look?.let { look = it }
         prefs.glass = g.name

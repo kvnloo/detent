@@ -240,7 +240,7 @@ private fun FeelRows(s: LauncherState, pal: Palette) {
             SlideChip("grid", s.gridVis, pal, listOf(0f, .2f, .4f, .6f, .8f, 1f), { s.cycleGrid() },
                 { s.setGrid(it, false) }, { s.setGrid(it, true) })
             HoldChip("glass · ${s.glass.label}", s.glass.on, pal, Glass.PRESETS.map { it.label }, Glass.PRESETS.indexOf(s.glass),
-                { s.toggleGlassPanel() }, { s.setGlass(Glass.PRESETS[it]) },
+                { s.toggleGlassPanel() }, { s.pickGlass(Glass.PRESETS[it]) },
                 title = "glass", note = "tap to tune it")
         }
         if (!s.layout.grid) Row(horizontalArrangement = gap) {
@@ -277,7 +277,7 @@ private fun GlassRows(s: LauncherState, pal: Palette) {
     Column(verticalArrangement = gap, horizontalAlignment = if (s.left) Alignment.End else Alignment.Start) {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(u.dp(6f))) {
             Glass.entries.filter { it != Glass.Custom || s.glass == Glass.Custom }.forEach { g ->
-                Chip(g.label, s.glass == g, pal, { s.haptic.on(); s.setGlass(g) }, padding = 13f)
+                Chip(g.label, s.glass == g, pal, { s.haptic.on(); s.pickGlass(g) }, padding = 13f)
             }
         }
         // Tint runs smoke (left) through clear (middle) to milk (right).
