@@ -3,6 +3,8 @@ package app.detent.launcher
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.core.content.edit
 
 /**
@@ -11,7 +13,7 @@ import androidx.core.content.edit
  *
  * Set the colours with:
  *   adb shell am broadcast -a app.detent.launcher.SET_COLORS -n <pkg>/app.detent.launcher.ColorsReceiver \
- *     --es bg '#181f23' --es fg '#d1deda' --es accent '#c8be72'
+ *     --es bg 181f23 --es fg d1deda --es accent c8be72
  */
 object Synced {
     const val NAME = "hyprland"
@@ -25,7 +27,7 @@ object Synced {
     val listeners = mutableListOf<() -> Unit>()
 
     fun theme(bg: Long, fg: Long, accent: Long): ThemeDef {
-        val light = android.graphics.Color.luminance(bg.toInt()) > 0.5f
+        val light = Color(bg).luminance() > 0.5f
         val hand = blend(fg, bg, 0.3f)
         return ThemeDef(NAME, GROUP, light, bg, fg, accent, SYSTEM_WALL, hand)
     }

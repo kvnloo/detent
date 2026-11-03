@@ -81,7 +81,23 @@ On the grid layouts, an app opens with a ripple of dots from the notch.
 
 The dial can sit on the right or the left edge.
 
-Detent has 27 themes. The 4 phone themes are dusk, ember, signal, and paper. They use a tinted dot-hand art. The 23 Omarchy themes each bring their own wallpaper. On the theme step, the colours change on each click of the dial. The wallpaper loads when the dial stops.
+Detent has 28 themes. The 4 phone themes are dusk, ember, signal, and paper. They use a tinted dot-hand art. The 23 Omarchy themes each bring their own wallpaper. The `hyprland` synced theme uses desktop colours and keeps the system wallpaper. On the theme step, the colours change on each click of the dial. The wallpaper loads when the dial stops.
+
+### Synced theme (`hyprland`)
+
+Choose `hyprland` on the theme step to match Detent's background (`bg`), text (`fg`), and accent (`accent`) colours to a desktop theme, such as Hyprland with pywal. The colours are saved on the phone and update when you send a new palette. The background colour also controls whether the theme uses light or dark styling.
+
+The synced theme never sets or replaces the system wallpaper. It shows the current Android wallpaper, including live wallpapers, behind the radial dial. Grid layouts draw a shade over that wallpaper behind their dots.
+
+With USB debugging enabled and the phone connected, send six-digit RGB hex values **without `#`**:
+
+```sh
+adb shell am broadcast -a app.detent.launcher.SET_COLORS \
+  -n app.detent.launcher/app.detent.launcher.ColorsReceiver \
+  --es bg 181f23 --es fg d1deda --es accent c8be72
+```
+
+If you installed Detent with a custom application ID, replace the package name before `/` with that ID.
 
 ### Use your own wallpaper
 
