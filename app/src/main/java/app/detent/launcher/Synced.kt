@@ -47,6 +47,7 @@ object Synced {
         val sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (sp.contains("bg")) put(sp.getLong("bg", 0), sp.getLong("fg", 0), sp.getLong("accent", 0))
         loadLive(ctx)
+        ImportedThemes.load(ctx)
     }
 
     /**
@@ -56,6 +57,10 @@ object Synced {
     fun loadLive(ctx: Context): Int {
         val f = java.io.File(java.io.File(ctx.filesDir, "live"), "themes.json")
         val list = runCatching { org.json.JSONArray(f.readText()) }.getOrNull() ?: return 0
+        val imported = THEMES.filter { it.group == ImportedThemes.GROUP }
+        while (THEMES.lastOrNull()?.group == ImportedThemes.GROUP) {
+            THEMES.removeAt(THEMES.lastIndex); PALETTES.removeAt(PALETTES.lastIndex); THEME_NAMES.removeAt(THEME_NAMES.lastIndex)
+        }
         while (THEMES.isNotEmpty() && THEMES.last().group == LIVE_GROUP) {
             THEMES.removeAt(THEMES.lastIndex); PALETTES.removeAt(PALETTES.lastIndex); THEME_NAMES.removeAt(THEME_NAMES.lastIndex)
         }
@@ -71,6 +76,7 @@ object Synced {
             THEMES += t; PALETTES += Palette(t); THEME_NAMES += name
             o.optString("file").takeIf { it.isNotBlank() }?.let { liveFiles[name] = it }
         }
+        for (t in imported) { THEMES += t; PALETTES += Palette(t); THEME_NAMES += t.name }
         return liveFiles.size
     }
 

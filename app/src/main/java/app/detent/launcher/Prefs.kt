@@ -24,7 +24,8 @@ class Prefs(ctx: Context) {
         if (!sp.getBoolean("done", false)) return null
         val cfg = Cfg(
             layout = sp.getInt("layout", 0).coerceIn(LAYOUTS.indices),
-            theme = savedThemeIndex(sp.getString("themeName", null), sp.getInt("theme", 0), THEME_NAMES),
+            theme = sp.getString("themeImportId", null)?.let { id -> THEMES.indexOfFirst { it.importId == id }.takeIf { it >= 0 } }
+                ?: savedThemeIndex(sp.getString("themeName", null), sp.getInt("theme", 0), THEME_NAMES),
             side = if (sp.getString("side", "right") == "left") Side.Left else Side.Right,
         )
         return Saved(cfg, sp.getStringSet("apps", null).orEmpty().toSet(), sp.getInt("pos", 0))
@@ -34,6 +35,7 @@ class Prefs(ctx: Context) {
         putBoolean("done", true)
         putInt("layout", cfg.layout)
         putInt("theme", cfg.theme)
+        putString("themeImportId", THEMES[cfg.theme].importId)
         putString("themeName", THEME_NAMES.getOrNull(cfg.theme))
         putString("side", if (cfg.side == Side.Left) "left" else "right")
         putStringSet("apps", HashSet(keys))
@@ -47,6 +49,8 @@ class Prefs(ctx: Context) {
         putBoolean("done", true)
         putInt("layout", cfg.layout)
         putInt("theme", cfg.theme)
+        putString("themeName", THEME_NAMES.getOrNull(cfg.theme))
+        putString("themeImportId", THEMES[cfg.theme].importId)
         putString("side", if (cfg.side == Side.Left) "left" else "right")
         putStringSet("apps", HashSet(keys))
         putInt("pos", 0)

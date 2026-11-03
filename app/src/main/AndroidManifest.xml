@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Downloads only collections explicitly requested in the theme importer. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- The mic button. The microphone is on only while Detent listens. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- A drag down from the top of the home screen opens the notifications. -->
@@ -52,6 +54,17 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="detent" android:host="import" />
             </intent-filter>
         </activity>
 
