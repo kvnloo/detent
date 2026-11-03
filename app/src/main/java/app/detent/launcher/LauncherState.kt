@@ -137,6 +137,12 @@ interface Host {
      */
     fun pickWallpaper(done: (path: String?, failed: Boolean) -> Unit)
 
+    /** Save one JSON file with the Android document picker. Null means the user cancelled. */
+    fun exportSettings(json: String, done: (Boolean?) -> Unit)
+
+    /** Choose a JSON file with the Android document picker. Cancel is not an error. */
+    fun importSettings(done: (String?, Boolean) -> Unit)
+
     /** Deletes saved wallpapers except [keep]. */
     fun cleanWallpapers(keep: String?)
 
@@ -1420,6 +1426,89 @@ class LauncherState(
         webSearch = !webSearch
         prefs.webSearch = webSearch
         toggled(webSearch)
+    }
+
+    private fun currentSettings() = SettingsData(
+        layout = layout.name,
+        theme = THEMES[cfg.theme].name,
+        side = if (left) "left" else "right",
+        apps = dialKeys,
+        quick = quick,
+        recent = prefs.recent,
+        sound = sound,
+        haptics = haptics,
+        dots = dots,
+        lockWall = lockWall,
+        ownBar = ownBar,
+        voice = voice,
+        webSearch = webSearch,
+    )
+
+    fun exportSettings() {
+        tap()
+        host.exportSettings(SettingsBackup.toJson(currentSettings())) { ok ->
+            if (ok != null) showToast(if (ok) "settings exported" else "can't export settings")
+        }
+    }
+
+    fun importSettings() {
+        tap()
+        if (!repo.loaded || repo.apps.isEmpty()) {
+            showToast("apps are still loading")
+            return
+        }
+        host.importSettings { text, failed ->
+            if (text == null) {
+                if (failed) showToast("can't read settings")
+                return@importSettings
+            }
+            val installed = repo.apps.mapTo(HashSet()) { it.key }
+            val data = runCatching {
+                SettingsBackup.fromJson(
+                    text, currentSettings(),
+                    LAYOUTS.mapTo(HashSet()) { it.name },
+                    THEMES.mapTo(HashSet()) { it.name },
+                    installed,
+                )
+            }.getOrNull()
+            if (data == null) {
+                showToast("can't import settings")
+                return@importSettings
+            }
+
+            // Keep at least three dial apps where possible, even when some saved apps are gone.
+            val keys = if (data.apps.size >= minOf(3, installed.size)) data.apps
+                else data.apps + repo.defaults().filter { it in installed }
+            cfg = Cfg(
+                layout = LAYOUTS.indexOfFirst { it.name == data.layout },
+                theme = THEMES.indexOfFirst { it.name == data.theme },
+                side = if (data.side == "left") Side.Left else Side.Right,
+            )
+            dialKeys = keys
+            quick = data.quick
+            recentKeys = data.recent
+            sound = data.sound
+            haptics = data.haptics
+            dots = data.dots
+            lockWall = data.lockWall
+            ownBar = data.ownBar
+            voice = data.voice
+            webSearch = data.webSearch
+            fb.sound = sound
+            fb.haptics = haptics
+            prefs.restore(data, cfg, keys)
+            prefs.syncDial(keys, System.currentTimeMillis())
+            appPos = 0
+            jumpTo(0f)
+            snapRadius()
+            showClock(instant = true)
+            // An import is committed even if the setup editor is later cancelled.
+            prevCfg = cfg
+            prevKeys = dialKeys
+            prevCustom = customWall
+            if (lockWall) syncWallpaper()
+            showToast("settings imported")
+        }
     }
 
     fun requestHome() {

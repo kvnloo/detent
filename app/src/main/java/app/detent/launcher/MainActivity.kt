@@ -62,6 +62,43 @@ class MainActivity : ComponentActivity(), Host {
         }
     }
 
+    private var exportJson: String? = null
+    private var exportDone: ((Boolean?) -> Unit)? = null
+    private val exportDocument = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val json = exportJson
+        val done = exportDone
+        exportJson = null
+        exportDone = null
+        if (uri == null || json == null) {
+            done?.invoke(null)
+            return@registerForActivityResult
+        }
+        thread(name = "detent-export") {
+            val ok = runCatching {
+                val stream = contentResolver.openOutputStream(uri) ?: error("can't open output")
+                stream.use { output -> java.io.OutputStreamWriter(output, Charsets.UTF_8).use { it.write(json) } }
+            }.isSuccess
+            runOnUiThread { done?.invoke(ok) }
+        }
+    }
+
+    private var importDone: ((String?, Boolean) -> Unit)? = null
+    private val importDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val done = importDone ?: return@registerForActivityResult
+        importDone = null
+        if (uri == null) {
+            done(null, false)
+            return@registerForActivityResult
+        }
+        thread(name = "detent-import") {
+            val result = runCatching {
+                val stream = contentResolver.openInputStream(uri) ?: error("can't open input")
+                stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            }
+            runOnUiThread { done(result.getOrNull(), result.isFailure) }
+        }
+    }
+
     private var heardDone: ((List<String>) -> Unit)? = null
     private val speech = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val done = heardDone ?: return@registerForActivityResult
@@ -240,6 +277,28 @@ class MainActivity : ComponentActivity(), Host {
             photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         } catch (e: ActivityNotFoundException) {
             pickDone = null
+            done(null, true)
+        }
+    }
+
+    override fun exportSettings(json: String, done: (Boolean?) -> Unit) {
+        exportJson = json
+        exportDone = done
+        try {
+            exportDocument.launch("detent-settings.json")
+        } catch (e: Exception) {
+            exportJson = null
+            exportDone = null
+            done(false)
+        }
+    }
+
+    override fun importSettings(done: (String?, Boolean) -> Unit) {
+        importDone = done
+        try {
+            importDocument.launch(arrayOf("application/json", "text/plain"))
+        } catch (e: Exception) {
+            importDone = null
             done(null, true)
         }
     }
