@@ -92,7 +92,7 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
 
     // The feel step has more rows of chips.
     val controlsY = u.navY - when {
-        step == Step.FEEL && s.glassOpen -> 286f
+        step == Step.FEEL && s.glassOpen -> 334f
         step == Step.FEEL -> if (s.layout.grid) 232f else 280f
         step == Step.SHAPE && s.customOpen -> 300f
         // Two rows of layout numbers.
@@ -199,6 +199,7 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
                 Step.THEME -> (if (s.kind == Kind.Readout) theme.name + " · " else "") +
                     theme.group + " · " + if (theme.light) "light" else "dark"
                 Step.FEEL -> when {
+                    s.glassOpen -> if (s.seeThrough) "hold a value and slide to set it" else "glass needs a see-through theme"
                     s.dots && !s.notifAccess -> "dots need notification access"
                     s.ownBar -> "drag down from the top for notifications"
                     s.lockWall -> "the lock screen uses the theme"
@@ -267,6 +268,7 @@ private fun FeelRows(s: LauncherState, pal: Palette) {
  * The glass panel: a starting look, then four values. Each value is a slider chip: tap steps, hold and slide
  * to set it, sticky at its marks. The dial and the wallpaper blur change live.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GlassRows(s: LauncherState, pal: Palette) {
     val u = LocalUnits.current
@@ -275,7 +277,10 @@ private fun GlassRows(s: LauncherState, pal: Palette) {
     val quarters = listOf(0f, .25f, .5f, .75f, 1f)
     fun stepUp(v: Float) = quarters.firstOrNull { it > v + .01f } ?: 0f
     Column(verticalArrangement = gap, horizontalAlignment = if (s.left) Alignment.End else Alignment.Start) {
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(u.dp(6f))) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(u.dp(6f), if (s.left) Alignment.End else Alignment.Start),
+            verticalArrangement = Arrangement.spacedBy(u.dp(6f)),
+        ) {
             Glass.entries.filter { it != Glass.Custom || s.glass == Glass.Custom }.forEach { g ->
                 Chip(g.label, s.glass == g, pal, { s.haptic.on(); s.pickGlass(g) }, padding = 13f)
             }
