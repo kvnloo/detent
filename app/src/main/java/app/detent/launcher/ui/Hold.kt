@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -189,11 +190,11 @@ fun Modifier.holdable(
 
 /** Places a [PickCard] above [anchor], inside the screen. */
 fun pickCard(host: HoldHost, u: Units, anchor: Rect, title: String?, note: String?, options: List<String>, current: Int): PickCard {
-    val row = 44f * u.k
+    val row = 38f * u.k
     val w = (maxOf(options.maxOf { it.length }, title?.length ?: 0, minOf(note?.length ?: 0, 26)) * 8.4f + 64f).coerceIn(150f, 300f) * u.k
     val head = (if (title != null) 30f else 8f) * u.k + (if (note != null) 40f * u.k else 0f)
     val h = head + row * options.size + 8f * u.k
-    val margin = 16f * u.k
+    val margin = 28f * u.k
     val left = (anchor.center.x - w / 2).coerceIn(margin, host.screenW - margin - w)
     val bottom = anchor.top - 12f * u.k
     return PickCard(anchor, title, note, options, current, Rect(left, bottom - h, left + w, bottom), row)
@@ -201,7 +202,7 @@ fun pickCard(host: HoldHost, u: Units, anchor: Rect, title: String?, note: Strin
 
 fun slideCard(host: HoldHost, u: Units, anchor: Rect, label: String, start: Float, stops: List<Float>, format: (Float) -> String): SlideCard {
     val w = 300f * u.k
-    val margin = 16f * u.k
+    val margin = 28f * u.k
     val left = (anchor.center.x - w / 2).coerceIn(margin, host.screenW - margin - w)
     val bottom = anchor.top - 14f * u.k
     return SlideCard(anchor, label, start, stops, Rect(left, bottom - 76f * u.k, left + w, bottom), format)
@@ -404,22 +405,32 @@ fun ChipFace(
     LaunchedEffect(down) {
         if (down) charge.animateTo(1f, tween(HOLD_MS.toInt())) else charge.animateTo(0f, tween(160))
     }
-    val solid = on && fill == null
+    val solid = on
     val border by animateColorAsState(if (on) pal.accent else pal.rim2, tween(200), label = "chipBorder")
     val bg by animateColorAsState(if (solid) pal.accent else offBg, tween(200), label = "chipBg")
-    val fg by animateColorAsState(if (solid) pal.onAccent else if (fill != null && on) pal.fg else pal.muted2, tween(200), label = "chipFg")
+    val fg by animateColorAsState(if (solid) pal.onAccent else pal.muted2, tween(200), label = "chipFg")
     val shape = if (square) RoundedCornerShape(u.dp(4f)) else RoundedCornerShape(50)
     val sized = if (square) Modifier.size(u.dp(size)) else Modifier.height(u.dp(40f))
     Box(
         modifier.then(sized).graphicsLayer { scaleX = sink; scaleY = sink }.clip(shape).background(bg)
             .then(
-                if (fill != null) {
-                    Modifier.background(Brush.horizontalGradient(0f to pal.accent.copy(alpha = .32f), fill to pal.accent.copy(alpha = .32f), fill to Color.Transparent))
+                if (fill != null && fill > 0f) {
+                    // The level, as a bar along the bottom of the chip.
+                    Modifier.drawBehind {
+                        val h = 3f * u.k
+                        val inset = size.height * .5f
+                        drawRoundRect(pal.onAccent.copy(alpha = .16f), Offset(inset, size.height - h - 5f * u.k), Size(size.width - 2 * inset, h), CornerRadius(h))
+                        drawRoundRect(pal.onAccent.copy(alpha = .55f), Offset(inset, size.height - h - 5f * u.k), Size((size.width - 2 * inset) * fill, h), CornerRadius(h))
+                    }
                 } else {
                     Modifier
                 },
             )
-            .background(Brush.horizontalGradient(0f to pal.fg.copy(alpha = .14f), charge.value to pal.fg.copy(alpha = .14f), charge.value to Color.Transparent))
+            .background(
+                (if (solid) pal.onAccent.copy(alpha = .12f) else pal.fg.copy(alpha = .14f)).let { c ->
+                    Brush.horizontalGradient(0f to c, charge.value to c, charge.value to Color.Transparent)
+                },
+            )
             .border(u.dp(1f + charge.value), border, shape)
             .then(if (square) Modifier else Modifier.padding(horizontal = u.dp(padding))),
         contentAlignment = Alignment.Center,
@@ -455,6 +466,8 @@ fun HoldCards(pal: Palette) {
 
 @Composable
 private fun CardsAt(c: Card, pal: Palette, u: Units, v: Float, committed: Boolean) {
+    // The rest of the screen steps back, so the card is the only thing to look at.
+    if (c !is TipCard) Box(Modifier.fillMaxSize().background(pal.bg.copy(alpha = .5f * v.coerceIn(0f, 1f))))
     Box(
         Modifier.fillMaxSize().graphicsLayer {
             alpha = v.coerceIn(0f, 1f)
@@ -474,7 +487,8 @@ private fun Modifier.at(r: Rect) = offset { IntOffset(r.left.roundToInt(), r.top
 private fun cardSurface(pal: Palette, u: Units) = Modifier
     .shadow(u.dp(18f), RoundedCornerShape(u.dp(18f)), ambientColor = Color.Black, spotColor = Color.Black)
     .clip(RoundedCornerShape(u.dp(18f)))
-    .background(pal.bg.copy(alpha = .94f))
+    .background(pal.bg)
+    .background(pal.fg.copy(alpha = .05f))
     .background(Brush.verticalGradient(0f to pal.fg.copy(alpha = .07f), .4f to Color.Transparent))
     .border(u.dp(1f), Brush.verticalGradient(0f to pal.fg.copy(alpha = .28f), 1f to pal.fg.copy(alpha = .08f)), RoundedCornerShape(u.dp(18f)))
 
@@ -575,7 +589,11 @@ private fun TipBody(c: TipCard, pal: Palette, u: Units, v: Float) {
     if (c.text.isEmpty()) return
     val density = androidx.compose.ui.platform.LocalDensity.current
     val w = (c.text.length * 8.2f + 28f) * u.k
-    val x by animateFloatAsState(c.at.center.x - w / 2, spring(dampingRatio = .8f, stiffness = 1600f), label = "tipX")
+    val sw = LocalHold.current?.screenW ?: Float.MAX_VALUE
+    val x by animateFloatAsState(
+        (c.at.center.x - w / 2).coerceIn(16f * u.k, maxOf(16f * u.k, sw - w - 16f * u.k)),
+        spring(dampingRatio = .8f, stiffness = 1600f), label = "tipX",
+    )
     val y = c.at.top - 44f * u.k
     Box(
         Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }

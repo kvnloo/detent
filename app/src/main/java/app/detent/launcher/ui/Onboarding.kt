@@ -116,8 +116,8 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
                             0f to pal.bg.copy(alpha = 0f),
                             (fadeH * .45f / (u.hd - controlsY + fadeH)) to pal.bg.copy(alpha = .35f),
                             (fadeH * .8f / (u.hd - controlsY + fadeH)) to pal.bg.copy(alpha = .82f),
-                            (fadeH / (u.hd - controlsY + fadeH)) to pal.bg.copy(alpha = .96f),
-                            1f to pal.bg.copy(alpha = .96f),
+                            (fadeH / (u.hd - controlsY + fadeH)) to pal.bg,
+                            1f to pal.bg,
                         ),
                     ),
             )
