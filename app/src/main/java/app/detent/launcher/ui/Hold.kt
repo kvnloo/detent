@@ -417,10 +417,11 @@ fun ChipFace(
                 if (fill != null && fill > 0f) {
                     // The level, as a bar along the bottom of the chip.
                     Modifier.drawBehind {
+                        val box = this.size
                         val h = 3f * u.k
-                        val inset = size.height * .5f
-                        drawRoundRect(pal.onAccent.copy(alpha = .16f), Offset(inset, size.height - h - 5f * u.k), Size(size.width - 2 * inset, h), CornerRadius(h))
-                        drawRoundRect(pal.onAccent.copy(alpha = .55f), Offset(inset, size.height - h - 5f * u.k), Size((size.width - 2 * inset) * fill, h), CornerRadius(h))
+                        val inset = box.height * .5f
+                        drawRoundRect(pal.onAccent.copy(alpha = .16f), Offset(inset, box.height - h - 5f * u.k), Size(box.width - 2 * inset, h), CornerRadius(h))
+                        drawRoundRect(pal.onAccent.copy(alpha = .55f), Offset(inset, box.height - h - 5f * u.k), Size((box.width - 2 * inset) * fill, h), CornerRadius(h))
                     }
                 } else {
                     Modifier
