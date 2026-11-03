@@ -81,7 +81,23 @@ On the grid layouts, an app opens with a ripple of dots from the notch.
 
 The dial can sit on the right or the left edge.
 
-Detent has 27 themes. The 4 phone themes are dusk, ember, signal, and paper. They use a tinted dot-hand art. The 23 Omarchy themes each bring their own wallpaper. On the theme step, the colours change on each click of the dial. The wallpaper loads when the dial stops.
+Detent has 28 themes. The 4 phone themes are dusk, ember, signal, and paper. They use a tinted dot-hand art. The 23 Omarchy themes each bring their own wallpaper. The `hyprland` synced theme uses desktop colours and keeps the system wallpaper. On the theme step, the colours change on each click of the dial. The wallpaper loads when the dial stops. Detent remembers your theme by name, so adding themes in an update does not change your choice.
+
+### Synced theme (`hyprland`)
+
+Choose `hyprland` on the theme step to match Detent's background (`bg`), text (`fg`), and accent (`accent`) colours to a desktop theme, such as Hyprland with pywal. The colours are saved on the phone and update when you send a new palette. The background colour also controls whether the theme uses light or dark styling.
+
+The synced theme never sets or replaces the system wallpaper. It shows the current Android wallpaper, including live wallpapers, behind the radial dial. Grid layouts draw a shade over that wallpaper behind their dots.
+
+With USB debugging enabled and the phone connected, send six-digit RGB hex values **without `#`**:
+
+```sh
+adb shell am broadcast -a app.detent.launcher.SET_COLORS \
+  -n app.detent.launcher/app.detent.launcher.ColorsReceiver \
+  --es bg 181f23 --es fg d1deda --es accent c8be72
+```
+
+If you installed Detent with a custom application ID, replace the package name before `/` with that ID.
 
 ### Use your own wallpaper
 
@@ -113,6 +129,12 @@ The `feel` step has 6 switches and a choice of status bar.
 | --- | --- |
 | `system bar` | The Android status bar. This is the default. |
 | `detent bar` | Only wifi, signal, and battery, in the style of the layout. The radial layouts draw them as hairlines. The grid layouts draw them as dots. Detent hides the Android status bar. |
+
+The `feel` step also has `export settings` and `import settings`. Export uses Android's file picker to save one `.json` file. Import chooses one `.json` file and applies its settings immediately. Keep the file if you plan to uninstall Detent: uninstalling removes the saved setup.
+
+The version 1 file stores the layout and theme **by name**, dial side, selected dial app keys, up to 3 quick buttons (app key and optional icon), recent search app keys, and the `sound`, `haptics`, `dots`, `lockWall`, `ownBar`, `voice`, and `webSearch` switches. The switches match the labels in the table above; `ownBar` means `detent bar`. Apps no longer installed on the phone are skipped. If the saved layout or theme is unavailable, Detent keeps the current one. Unknown file fields are ignored; unsupported file versions are rejected.
+
+The file does not include your wallpaper photo, Android permissions, notification history, app usage counts, or synced desktop theme colours. Import keeps the wallpaper photo already stored on this device. Notification dots still need notification access on the new phone.
 
 With the `detent bar`, drag down from the top of the home screen to open the notifications. A swipe from the top edge shows the Android status bar for a short time.
 

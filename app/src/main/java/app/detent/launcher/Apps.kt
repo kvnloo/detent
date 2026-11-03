@@ -29,7 +29,15 @@ class AppEntry(
     val user: UserHandle,
     /** Package plus user serial. Unread dots and "last opened" times use this id. */
     val pkgUser: String,
+    /** The apps of a folder row, cover first; null for a plain app. */
+    val kids: List<AppEntry>? = null,
 ) {
+    /** The app that a tap on the row opens: the cover of a folder, or the app itself. */
+    val target: AppEntry get() = kids?.firstOrNull() ?: this
+
+    /** How many apps the row holds. */
+    val count get() = kids?.size ?: 1
+
     /** The name on the dial. Long names lose their tail so they fit inside the rim. */
     val display = if (label.length > 17) label.take(16).trimEnd() + "…" else label
     val initial: String = if (display.isEmpty()) "?" else String(Character.toChars(display.codePointAt(0)))

@@ -16,6 +16,13 @@
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
+    <!-- The voice button can open an assistant app instead of Detent's own listening. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.ASSIST" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:enableOnBackInvokedCallback="true"
@@ -47,6 +54,28 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Colours for the synced theme, sent from a desktop over adb. -->
+        <receiver
+            android:name=".ColorsReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="app.detent.launcher.SET_COLORS" />
+                <action android:name="app.detent.launcher.RELOAD_LIVE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Shares the live wallpaper packages in files/live with the wallpaper app. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.live"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/live_paths" />
+        </provider>
 
         <service
             android:name=".UnreadService"

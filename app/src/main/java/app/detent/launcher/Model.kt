@@ -22,7 +22,11 @@ val Ease = CubicBezierEasing(.2f, .8f, .2f, 1f)
 fun mod(a: Int, n: Int) = ((a % n) + n) % n
 fun mod(a: Float, n: Float) = ((a % n) + n) % n
 
-enum class Markers { Double, Ticks, Nodes, Dots }
+/**
+ * Bezel is a ring of lit glass with etched ticks, Comet swells the marks into a tail around the notch,
+ * Spokes is a watch bezel of inward ticks, and Wave rolls the marks on a travelling wave as the dial turns.
+ */
+enum class Markers { Double, Ticks, Nodes, Dots, Bezel, Comet, Spokes, Wave }
 enum class Side { Right, Left }
 
 /**
@@ -39,6 +43,8 @@ class Layout(
     val markers: Markers,
     val ticksPerApp: Int,
     val kind: Kind = Kind.Radial,
+    /** The notch style. Presets use the style of their marks; a custom dial can mix them. */
+    val notch: Markers = markers,
 ) {
     val grid get() = kind != Kind.Radial
 
@@ -54,7 +60,13 @@ class Layout(
     fun cy(hd: Float) = if (grid) snap(476f + (hd - H0) / 2f) else CY0 + (hd - H0) / 2f
 }
 
-val LAYOUTS = listOf(
+// Declared before LAYOUTS: the custom entry reads CURVES while LAYOUTS initialises.
+/** Rim radius per curve name, flattest first. */
+val CURVES = listOf("flat" to 560f, "wide" to 420f, "soft" to 330f, "round" to 220f, "tight" to 170f)
+/** Marks per app. 0 is auto: one mark per app in the row, so a folder shows how many apps it holds. */
+val DENSITIES = listOf(0, 1, 2, 3, 4, 6, 8, 10)
+
+val LAYOUTS: MutableList<Layout> = mutableListOf(
     Layout("soft · radial · double", 330f, Markers.Double, 4),
     Layout("round · radial · double", 200f, Markers.Double, 5),
     Layout("soft · radial · ticks", 330f, Markers.Ticks, 4),
@@ -63,7 +75,38 @@ val LAYOUTS = listOf(
     Layout("grid · field", 300f, Markers.Double, 1, Kind.Field),
     Layout("grid · lens", 300f, Markers.Double, 1, Kind.Lens),
     Layout("grid · readout", 200f, Markers.Double, 1, Kind.Readout),
+    // Added after the stock layouts so saved layout numbers keep their meaning.
+    Layout("glass · radial · bezel", 270f, Markers.Bezel, 4),
+    Layout("orbit · radial · comet", 300f, Markers.Comet, 3),
+    Layout("watch · radial · spokes", 180f, Markers.Spokes, 10),
+    Layout("liquid · radial · wave", 400f, Markers.Wave, 8),
+    // The user's own mix, always last. Prefs.customLayout replaces it at start.
+    customLayout(330f, Markers.Double, 4, Markers.Double),
 )
+
+/** Index of the custom dial in [LAYOUTS]. */
+val CUSTOM get() = LAYOUTS.lastIndex
+
+fun curveName(r: Float) = CURVES.minBy { kotlin.math.abs(it.second - r) }.first
+
+fun customLayout(radius: Float, marks: Markers, perApp: Int, notch: Markers) = Layout(
+    "custom · ${curveName(radius)} · ${marks.name.lowercase()}" +
+        (if (notch != marks) " · ${notch.name.lowercase()} notch" else ""),
+    radius, marks, perApp, Kind.Radial, notch,
+)
+
+/** "radius|marks|perApp|notch", as saved in prefs. Returns null for anything that does not parse. */
+fun encodeLayout(l: Layout) = "${l.radius}|${l.markers.name}|${l.ticksPerApp}|${l.notch.name}"
+
+fun decodeLayout(s: String?): Layout? {
+    val p = s?.split('|') ?: return null
+    if (p.size != 4) return null
+    val r = p[0].toFloatOrNull()?.takeIf { it in 120f..800f } ?: return null
+    val m = Markers.entries.firstOrNull { it.name == p[1] } ?: return null
+    val t = p[2].toIntOrNull()?.takeIf { it in 0..12 } ?: return null
+    val n = Markers.entries.firstOrNull { it.name == p[3] } ?: return null
+    return customLayout(r, m, t, n)
+}
 
 // The grid layouts. Grid dots sit every G units, starting GO units from the top left corner.
 const val G = 12f
@@ -105,7 +148,7 @@ private fun phone(name: String, light: Boolean, bg: Long, fg: Long, acc: Long, h
 private fun omarchy(name: String, light: Boolean, bg: Long, fg: Long, acc: Long) =
     ThemeDef(name, "omarchy", light, bg, fg, acc, "walls/$name.webp")
 
-val THEMES = listOf(
+val THEMES: MutableList<ThemeDef> = mutableListOf(
     phone("dusk", false, 0xFF1D2021, 0xFFEBDBB2, 0xFFFE8019, 0xFF504945),
     phone("ember", false, 0xFF000000, 0xFFEBE5DC, 0xFFDF6124, 0xFF3A3733),
     phone("signal", false, 0xFF000000, 0xFFFFFFFF, 0xFFFF453A, 0xFF3A3A3A),
@@ -136,9 +179,11 @@ val THEMES = listOf(
     omarchy("tokyo-night", false, 0xFF1A1B26, 0xFFA9B1D6, 0xFF7AA2F7),
     ThemeDef("vantablack", "omarchy", false, 0xFF000000, 0xFFFFFFFF, 0xFF8D8D8D, null, 0xFF505050),
     omarchy("white", true, 0xFFFFFFFF, 0xFF000000, 0xFF6E6E6E),
+    // Colours from the desktop theme; see Synced. Defaults match groot's pywal palette.
+    Synced.theme(0xFF181F23, 0xFFD1DEDA, 0xFFC8BE72),
 )
 
-val THEME_NAMES = THEMES.map { it.name }
+val THEME_NAMES: MutableList<String> = THEMES.mapTo(mutableListOf()) { it.name }
 
 /** Mixes [a] into [b]. t = 1 gives [a]. */
 fun mix(a: Color, b: Color, t: Float) = Color(
@@ -171,7 +216,7 @@ class Palette(t: ThemeDef) {
     val chipBg = bg.copy(alpha = .5f)
 }
 
-val PALETTES = THEMES.map { Palette(it) }
+val PALETTES: MutableList<Palette> = THEMES.mapTo(mutableListOf()) { Palette(it) }
 
 /**
  * Colour matrix for the dot-hand art. The art is white dots on black. The dots take the hand colour and the
@@ -204,9 +249,25 @@ fun labelScale(a: Float, chars: Int): Float {
     return min(1 + .45f * cl * cl, fitScale(chars))
 }
 
+/**
+ * The dial row under a touch at [dist] units from the dial centre and [kf] rows round from row 0, or null.
+ * A row owns its angular slot (within .45 rows) from the far end of its [chars]-glyph name to 16 units
+ * outside the rim, where the marks are.
+ */
+fun dialSlot(dist: Float, kf: Float, pos: Float, g: Geo, m: Markers, chars: Int): Int? {
+    val k = kotlin.math.round(kf).toInt()
+    if (kotlin.math.abs(kf - k) > .45f || kotlin.math.abs(k - pos) > g.span) return null
+    val w = chars * CH * labelScale(kotlin.math.abs(k - pos), chars)
+    val inner = labelRadius(g, m) - w - 14f
+    return if (dist >= inner && dist <= g.r + 16f) k else null
+}
+
 fun labelRadius(g: Geo, m: Markers) = g.r - when (m) {
     Markers.Ticks -> 28f
     Markers.Double -> 34f
+    Markers.Bezel -> 40f
+    Markers.Spokes -> 34f
+    Markers.Wave -> 30f
     else -> 22f
 }
 

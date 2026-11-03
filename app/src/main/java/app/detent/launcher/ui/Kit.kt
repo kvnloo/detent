@@ -1,5 +1,7 @@
 package app.detent.launcher.ui
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -76,6 +78,9 @@ class Units(val k: Float, private val density: Float, val hd: Float, val top: Fl
 
 val LocalUnits = staticCompositionLocalOf { Units(1f, 1f, H0, 0f, 0f) }
 
+/** A soft shadow behind text that sits on a live wallpaper, so it reads on any part of the picture. Null = none. */
+val LocalHalo = staticCompositionLocalOf<Color?> { null }
+
 /** Places a child at a design-unit offset inside a Box. */
 fun Modifier.place(u: Units, x: Float, y: Float) =
     offset { IntOffset((x * u.k).roundToInt(), (y * u.k).roundToInt()) }
@@ -84,8 +89,9 @@ fun Modifier.place(u: Units, x: Float, y: Float) =
 fun Modifier.tap(enabled: Boolean = true, onClick: () -> Unit): Modifier =
     clickable(remember { MutableInteractionSource() }, null, enabled = enabled, onClick = onClick)
 
-fun textStyle(u: Units, size: Float, color: Color, weight: FontWeight = FontWeight.Normal, spacing: Float = 0f, line: Float = 1.2f) =
+fun textStyle(u: Units, size: Float, color: Color, weight: FontWeight = FontWeight.Normal, spacing: Float = 0f, line: Float = 1.2f, halo: Color? = null) =
     TextStyle(
+        shadow = halo?.let { Shadow(it, Offset.Zero, blurRadius = (4f + size * .5f) * u.k) },
         color = color,
         fontFamily = Mono,
         fontWeight = weight,
@@ -111,7 +117,7 @@ fun Txt(
     BasicText(
         text,
         modifier,
-        style = textStyle(u, size, color, weight, spacing, line).copy(textAlign = align),
+        style = textStyle(u, size, color, weight, spacing, line, LocalHalo.current).copy(textAlign = align),
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
     )

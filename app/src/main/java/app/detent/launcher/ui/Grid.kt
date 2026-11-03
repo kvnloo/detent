@@ -418,9 +418,10 @@ fun DotGrid(s: LauncherState, pal: Palette, wave: VoiceWave, status: DeviceStatu
                 nc.drawPoints(d.pts, 0, d.n, point)
                 nc.restore()
             }
-            batch(base, 1.2f, .16f, pal.fg)
-            batch(dim, 1.1f + .1f * (1 - dial), .08f + .08f * (1 - dial), pal.fg)
-            batch(unlit, .85f, .08f * read, pal.fg)
+            val gv = s.gridVis
+            batch(base, 1.2f, .16f * gv, pal.fg)
+            batch(dim, 1.1f + .1f * (1 - dial), (.08f + .08f * (1 - dial)) * gv, pal.fg)
+            batch(unlit, .85f, .08f * read * gv, pal.fg)
             batch(flood, 8.9f, 1f, pal.sheet)
             batch(floodRead, 4.5f, 1f, pal.sheet)
             var q = 0

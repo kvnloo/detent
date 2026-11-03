@@ -155,7 +155,11 @@ fun DetentRoot(s: LauncherState) {
                 s.clockTop = u.clockTop
                 s.buttonY = u.buttonY
             }
-            CompositionLocalProvider(LocalUnits provides u) { Home(s) }
+            // Text over a live wallpaper gets a soft shadow in the theme's background colour.
+            val halo = if (s.seeThrough) PALETTES[s.cfg.theme].bg.copy(alpha = .7f) else null
+            val hold = remember { HoldHost(s.haptic) }
+            hold.screenW = constraints.maxWidth.toFloat()
+            CompositionLocalProvider(LocalUnits provides u, LocalHalo provides halo, LocalHold provides hold) { Home(s) }
         }
     }
 }
@@ -184,7 +188,7 @@ private fun Home(s: LauncherState) {
     }
 
     Box(
-        Modifier.fillMaxSize().background(bg)
+        Modifier.fillMaxSize().background(if (THEMES[wall].wall == app.detent.launcher.Synced.SYSTEM_WALL && (s.customWall == null || s.layout.grid)) bg.copy(alpha = seeThroughShade(s)) else bg)
             .focusRequester(focus).focusable()
             .onKeyEvent { it.type == KeyEventType.KeyDown && s.key(it.key) },
     ) {
@@ -207,7 +211,11 @@ private fun Home(s: LauncherState) {
         AppsHint(s, pal)
         CornerButtons(s, pal)
         HearLayer(s, pal)
-        if (s.ob != null) Onboarding(s, pal, THEMES[live])
+        if (s.ob != null) {
+            Onboarding(s, pal, THEMES[live])
+            HoldCards(pal)
+        }
+        ModePill(s, pal)
         QuickMenuView(s, pal)
         SearchSheet(s, pal)
         StatusStrip(s, pal, status)
@@ -257,6 +265,13 @@ private fun rememberAsset(path: String): Pair<String, ImageBitmap>? {
     return shown
 }
 
+/** The shade over a see-through theme: the glass tint, or the grid's own shade scaled by its visibility. */
+private fun seeThroughShade(s: LauncherState): Float {
+    val grid = s.layout.grid
+    val base = s.lookNow?.veil ?: if (grid) .45f else 0f
+    return if (grid) base * (.35f + .65f * s.gridVis) else base
+}
+
 @Composable
 private fun Wallpaper(t: ThemeDef, pal: Palette, left: Boolean, custom: String?) {
     val wall = custom ?: t.wall
@@ -264,9 +279,12 @@ private fun Wallpaper(t: ThemeDef, pal: Palette, left: Boolean, custom: String?)
         HandArt(pal, left)
         return
     }
-    val img = rememberAsset(if (custom == null && left && t.wallLeft != null) t.wallLeft else wall)
-    Crossfade(img, animationSpec = tween(450), label = "wall") { p ->
-        if (p != null) Image(p.second, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+    // The synced theme draws only the shade; the system (live) wallpaper shows through the window.
+    if (wall != app.detent.launcher.Synced.SYSTEM_WALL) {
+        val img = rememberAsset(if (custom == null && left && t.wallLeft != null) t.wallLeft else wall)
+        Crossfade(img, animationSpec = tween(450), label = "wall") { p ->
+            if (p != null) Image(p.second, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
     }
     val b = pal.bg
     Box(
@@ -645,6 +663,36 @@ private fun ScrubLetter(s: LauncherState, pal: Palette) {
     }
 }
 
+/** While a folder is open, or a row rides in the notch: what is going on, and a tap to end it. */
+@Composable
+private fun ModePill(s: LauncherState, pal: Palette) {
+    val u = LocalUnits.current
+    val f = s.openFolder
+    val carried = s.carry?.let { k -> s.dialApps.firstOrNull { it.key == k } }
+    val text = when {
+        carried != null -> "moving ${carried.display} · tap to drop"
+        f != null -> "‹  ${f.display} · ${f.count}"
+        else -> null
+    }
+    var last by remember { mutableStateOf("") }
+    if (text != null) last = text
+    val shown = text != null && s.ob == null && !s.search
+    val a by animateFloatAsState(if (shown) 1f else 0f, tween(220), label = "modePill")
+    if (a < .01f) return
+    val shape = RoundedCornerShape(50)
+    SideBox(s.left, s.clockTop + 150f, 24f) {
+        Box(
+            Modifier.graphicsLayer { alpha = a; translationY = (1 - a) * -6f * u.k }
+                .height(u.dp(40f)).clip(shape).background(pal.btnBg).border(u.dp(1f), pal.accent.copy(alpha = .5f), shape)
+                .tap(enabled = shown) { if (s.carry != null) s.dropCarry() else s.closeFolder() }
+                .padding(horizontal = u.dp(16f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Txt(last, 12f, pal.fg, maxLines = 1, spacing = .02f)
+        }
+    }
+}
+
 @Composable
 private fun PressRing(s: LauncherState, pal: Palette) {
     val u = LocalUnits.current
@@ -794,7 +842,20 @@ private fun QuickMenuView(s: LauncherState, pal: Palette) {
                 MenuItem("change app", pal.muted2) { s.menuQuickApp() }
                 if (s.quick.size < QUICK_MAX) MenuItem("add a quick app", pal.muted2) { s.menuQuickAdd() }
                 MenuItem("remove quick app", pal.muted2) { s.menuQuickRemove() }
+            } else if (s.folderKey != null) {
+                MenuItem("move", pal.muted2) { s.menuMove() }
+                MenuItem("app info", pal.muted2) { s.menuInfo() }
+                MenuItem("take out of folder", pal.muted2) { s.menuTakeOut() }
+            } else if (m.app.kids != null) {
+                MenuItem("move", pal.muted2) { s.menuMove() }
+                MenuItem("edit folder", pal.muted2) { s.menuFolder() }
+                MenuItem("ungroup", pal.muted2) { s.menuUngroup() }
+                MenuItem("remove from dial", pal.muted2) { s.menuRemove() }
             } else {
+                MenuItem("move", pal.muted2) { s.menuMove() }
+                MenuItem("make a folder", pal.muted2) { s.menuFolder() }
+                val sw = s.swipeTarget(m.app)
+                MenuItem(if (sw != null) "swipe opens ${sw.display}" else "set a swipe app", pal.muted2) { s.menuSwipe() }
                 MenuItem("app info", pal.muted2) { s.menuInfo() }
                 MenuItem("remove from dial", pal.muted2) { s.menuRemove() }
             }
@@ -807,7 +868,7 @@ private fun QuickMenuView(s: LauncherState, pal: Palette) {
         ) { body() }
     } else {
         // Below the selected app. Near the bottom, the menu moves up so that it stays on the screen.
-        SideBox(s.left, min(s.anchorY + 30f, u.hd - u.bottom - 330f), 24f) { body() }
+        SideBox(s.left, min(s.anchorY + 30f, u.hd - u.bottom - 470f), 24f) { body() }
     }
 }
 

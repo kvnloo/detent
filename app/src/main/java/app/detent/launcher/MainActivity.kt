@@ -62,6 +62,43 @@ class MainActivity : ComponentActivity(), Host {
         }
     }
 
+    private var exportJson: String? = null
+    private var exportDone: ((Boolean?) -> Unit)? = null
+    private val exportDocument = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val json = exportJson
+        val done = exportDone
+        exportJson = null
+        exportDone = null
+        if (uri == null || json == null) {
+            done?.invoke(null)
+            return@registerForActivityResult
+        }
+        thread(name = "detent-export") {
+            val ok = runCatching {
+                val stream = contentResolver.openOutputStream(uri) ?: error("can't open output")
+                stream.use { output -> java.io.OutputStreamWriter(output, Charsets.UTF_8).use { it.write(json) } }
+            }.isSuccess
+            runOnUiThread { done?.invoke(ok) }
+        }
+    }
+
+    private var importDone: ((String?, Boolean) -> Unit)? = null
+    private val importDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val done = importDone ?: return@registerForActivityResult
+        importDone = null
+        if (uri == null) {
+            done(null, false)
+            return@registerForActivityResult
+        }
+        thread(name = "detent-import") {
+            val result = runCatching {
+                val stream = contentResolver.openInputStream(uri) ?: error("can't open input")
+                stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            }
+            runOnUiThread { done(result.getOrNull(), result.isFailure) }
+        }
+    }
+
     private var heardDone: ((List<String>) -> Unit)? = null
     private val speech = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val done = heardDone ?: return@registerForActivityResult
@@ -82,6 +119,11 @@ class MainActivity : ComponentActivity(), Host {
         enableEdgeToEdge(bars, bars)
         super.onCreate(savedInstanceState)
         window.isNavigationBarContrastEnforced = false
+        Synced.load(applicationContext)
+        Synced.listeners += redraw
+        // Lets a live wallpaper show behind the synced theme. Other themes paint over it.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+        window.setBackgroundDrawableResource(android.R.color.transparent)
         repo = AppsRepository(applicationContext)
         state = LauncherState(this, repo, Prefs(applicationContext), Feedback(applicationContext), scope)
         repo.start()
@@ -94,6 +136,7 @@ class MainActivity : ComponentActivity(), Host {
     override fun onResume() {
         super.onResume()
         state.onResume()
+        state.syncGlass()
     }
 
     override fun onPause() {
@@ -113,7 +156,35 @@ class MainActivity : ComponentActivity(), Host {
         if (home && alreadyHome) state.onHome()
     }
 
+    override fun assistants(): List<Pair<String, String>> = packageManager
+        .queryIntentActivities(Intent(Intent.ACTION_ASSIST), 0)
+        .map { it.activityInfo.packageName to it.loadLabel(packageManager).toString() }
+        .distinctBy { it.first }
+        .filter { it.first != packageName }
+        .sortedBy { it.second.lowercase() }
+
+    override fun openAssistant(pkg: String): Boolean =
+        open(Intent(Intent.ACTION_ASSIST).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+
+    override fun setGlassBlur(look: GlassLook?) {
+        if (Build.VERSION.SDK_INT < 31) return
+        val on = look != null && windowManager.isCrossWindowBlurEnabled
+        window.setBackgroundBlurRadius(if (on) look!!.blurPx(screenSize().first) else 0)
+    }
+
+    override fun openLiveWallpaper(theme: ThemeDef): Boolean {
+        val f = Synced.liveFile(applicationContext, theme) ?: return false
+        val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.live", f)
+        val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/octet-stream")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            .setPackage("io.wallpaperengine.weclient")
+        return open(view) || open(view.setPackage(null))
+    }
+
+    private val redraw: () -> Unit = { runOnUiThread { recreate() } }
+
     override fun onDestroy() {
+        Synced.listeners -= redraw
         stopHearing()
         repo.stop()
         state.release()
@@ -206,6 +277,28 @@ class MainActivity : ComponentActivity(), Host {
             photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         } catch (e: ActivityNotFoundException) {
             pickDone = null
+            done(null, true)
+        }
+    }
+
+    override fun exportSettings(json: String, done: (Boolean?) -> Unit) {
+        exportJson = json
+        exportDone = done
+        try {
+            exportDocument.launch("detent-settings.json")
+        } catch (e: Exception) {
+            exportJson = null
+            exportDone = null
+            done(false)
+        }
+    }
+
+    override fun importSettings(done: (String?, Boolean) -> Unit) {
+        importDone = done
+        try {
+            importDocument.launch(arrayOf("application/json", "text/plain"))
+        } catch (e: Exception) {
+            importDone = null
             done(null, true)
         }
     }

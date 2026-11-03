@@ -11,7 +11,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.detent.launcher"
+        applicationId = providers.gradleProperty("detentId").orNull ?: "app.detent.launcher"
         // Predefined vibration effects and the home role need API 29.
         minSdk = 29
         targetSdk = 36
@@ -69,6 +69,7 @@ kotlin {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.kotlinx.serialization.json)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
