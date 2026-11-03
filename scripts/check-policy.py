@@ -5,7 +5,7 @@ import subprocess
 
 
 def bootstrap_path(path):
-    return path.startswith(('.github/', 'scripts/', 'docs/', 'app/src/androidTest/')) or path in {'README.md', 'app/build.gradle.kts'}
+    return path.startswith(('.github/', 'scripts/', 'docs/', 'app/src/androidTest/')) or path in {'README.md', 'app/build.gradle.kts', 'app/lint-baseline.xml'}
 
 
 def allowed(base, head):

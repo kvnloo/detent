@@ -22,6 +22,7 @@ class BranchPolicyTest(unittest.TestCase):
     def test_bootstrap_rejects_product_source(self):
         self.assertTrue(policy['bootstrap_path']('.github/workflows/checks.yml'))
         self.assertTrue(policy['bootstrap_path']('app/build.gradle.kts'))
+        self.assertTrue(policy['bootstrap_path']('app/lint-baseline.xml'))
         self.assertFalse(policy['bootstrap_path']('app/src/main/java/app/detent/launcher/LauncherState.kt'))
 
     def test_ci_bootstrap_does_not_authorize_features_on_main(self):

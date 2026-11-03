@@ -80,6 +80,12 @@ android {
         buildConfig = true
     }
 
+    lint {
+        // Pre-existing Glass.kt RuntimeShader NewApi findings only (guarded by SDK_INT >= 33).
+        // Any new lint error still fails CI; shrink this file, never regenerate it to hide new ones.
+        baseline = file("lint-baseline.xml")
+    }
+
     androidResources {
         // The wallpapers are already compressed WebP files.
         noCompress += "webp"
