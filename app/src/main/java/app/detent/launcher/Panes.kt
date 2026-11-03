@@ -34,7 +34,7 @@ class Pane(
 class Slot(val col: Col, val index: Int, val d: Float, val rIn: Float, val rOut: Float, val pane: Pane)
 
 /** Ring bands relative to the rim radius [r]. [deep] runs 0 (main only) to 1 (side columns out). */
-class Bands(r: Float, deep: Float) {
+class Bands(r: Float, private val deep: Float) {
     private fun lerp(a: Float, b: Float) = a + (b - a) * deep
     val mainIn = lerp(r + 16f, r + 10f)
     val mainOut = lerp(r + 206f, r + 118f)
