@@ -362,7 +362,12 @@ private fun IconStep(s: LauncherState, pal: Palette, app: AppEntry) {
             },
             contentAlignment = Alignment.CenterStart,
         ) {
-            Txt(app.display, 26f, pal.fg, weight = FontWeight.Light, spacing = -.03f, maxLines = 1)
+            val nameMark = s.nameMark(app)
+            if (nameMark != null) {
+                Canvas(Modifier.size(u.dp(26f))) { drawQuickIcon(nameMark, pal.fg, Offset.Zero, size.width, 1.5f * u.k) }
+            } else {
+                Txt(app.display, 26f, pal.fg, weight = FontWeight.Light, spacing = -.03f, maxLines = 1)
+            }
         }
         Box(Modifier.height(u.dp(44f)).tap { s.unpick() }.padding(horizontal = u.dp(10f)), contentAlignment = Alignment.Center) {
             Txt("back", 13f, pal.muted2)

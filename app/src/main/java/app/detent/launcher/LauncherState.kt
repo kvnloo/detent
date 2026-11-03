@@ -493,6 +493,23 @@ class LauncherState(
         return QuickIcons.forFolder(row.label, kids.map { it.label to it.component.packageName })
     }
 
+    /**
+     * The icon that stands for the name of [row] when the name is only an emoji, or null. Headers draw it in
+     * place of the colour emoji, so a 🔒 folder reads as the same hairline lock everywhere.
+     */
+    fun nameMark(row: AppEntry): String? {
+        val kids = row.kids ?: return null
+        if (!QuickIcons.markOnly(row.label)) return null
+        return rowIcon(row) ?: QuickIcons.forFolder(row.label, kids.map { it.label to it.component.packageName })
+    }
+
+    /** The name of [row] in a sentence: an emoji-only folder name becomes words, like "the lock folder". */
+    fun spoken(row: AppEntry): String {
+        val kids = row.kids ?: return row.display
+        if (!QuickIcons.markOnly(row.label)) return row.display
+        return "the " + QuickIcons.forFolder(row.label, kids.map { it.label to it.component.packageName }) + " folder"
+    }
+
     /** Hold a folder, then "change icon". */
     fun menuFolderIcon() = afterMenu(160) { row ->
         if (row.kids == null) return@afterMenu
@@ -1666,7 +1683,7 @@ class LauncherState(
         reindex(mod(mod(pos.roundToInt(), size), size - 1))
         dialKeys = before - app.key
         persist()
-        showToast("removed ${app.display}") { setAppsKeep(before) }
+        showToast("removed ${spoken(app)}") { setAppsKeep(before) }
     }
 
     // Dial hints: add an app that you often open from search, or remove a dial app that you do not open.
@@ -1725,7 +1742,7 @@ class LauncherState(
         fb.double()
         fb.click(false)
         setAppsKeep(before - app.key)
-        showToast("removed ${app.display}") { setAppsKeep(before) }
+        showToast("removed ${spoken(app)}") { setAppsKeep(before) }
     }
 
     /** Counts an open from search or voice of an app that is not on the dial. */
@@ -1816,7 +1833,7 @@ class LauncherState(
         val t = swipeTarget(row)
         if (t == null) {
             fb.refuse()
-            showToast("hold ${row.display} to give it a swipe")
+            showToast("hold ${spoken(row)} to give it a swipe")
             return
         }
         launchFrom(k, row, t)
@@ -1850,7 +1867,7 @@ class LauncherState(
         carryIn = folderKey
         carry = app.key
         fb.double()
-        showToast("turn the dial to move ${app.display}, tap to drop it")
+        showToast("turn the dial to move ${spoken(app)}, tap to drop it")
     }
 
     private fun carryStep() {
@@ -1873,7 +1890,7 @@ class LauncherState(
         fb.click(true)
         fb.double()
         val now = dialApps.map { it.key }
-        val name = dialApps.firstOrNull { it.key == key }?.display ?: "it"
+        val name = dialApps.firstOrNull { it.key == key }?.let { spoken(it) } ?: "it"
         if (before != null && before != now) showToast("moved $name") { applyOrder(before, inFolder) }
     }
 
@@ -1989,7 +2006,7 @@ class LauncherState(
                 saveFolders(folders.map { if (it.key == row) it.copy(name = name, keys = keys) else it })
             }
             fb.double()
-            showToast("saved $name") { restore(beforeKeys, beforeOrder, beforeFolders, beforeSwipes) }
+            showToast("saved ${QuickIcons.spokenFolder(name)}") { restore(beforeKeys, beforeOrder, beforeFolders, beforeSwipes) }
             return
         }
         if (keys.size < 2) {
@@ -2015,7 +2032,7 @@ class LauncherState(
         setRows(nextKeys, nextOrder, f.key)
         fb.double()
         fb.click(false)
-        showToast("made folder $name, swipe it to open") { restore(beforeKeys, beforeOrder, beforeFolders, beforeSwipes) }
+        showToast("made folder ${QuickIcons.spokenFolder(name)}, swipe it to open") { restore(beforeKeys, beforeOrder, beforeFolders, beforeSwipes) }
     }
 
     /** Hold a folder, then "ungroup": its apps take its place on the dial. */
@@ -2029,7 +2046,7 @@ class LauncherState(
         saveFolders(folders.filter { it.key != row.key })
         setRows(dialKeys - row.key + add, nextOrder, add.firstOrNull())
         fb.double()
-        showToast("ungrouped ${row.display}") { restore(beforeKeys, beforeOrder, beforeFolders, swipes) }
+        showToast("ungrouped ${spoken(row)}") { restore(beforeKeys, beforeOrder, beforeFolders, swipes) }
     }
 
     /** In a folder: hold an app, then "take out". It goes on the dial next to the folder. */
@@ -2051,7 +2068,7 @@ class LauncherState(
         dialKeys = dialKeys + app.key
         persist()
         fb.double()
-        showToast("took ${app.display} out of ${f.name.lowercase()}") { restore(beforeKeys, beforeOrder, beforeFolders, swipes) }
+        showToast("took ${app.display} out of ${QuickIcons.spokenFolder(f.name.lowercase())}") { restore(beforeKeys, beforeOrder, beforeFolders, swipes) }
     }
 
     private fun afterQuickMenu(action: (slot: Int, app: AppEntry) -> Unit) {
@@ -2445,7 +2462,7 @@ class LauncherState(
         saveFolderIcons(folderIcons + (id to (icon ?: NO_ICON)))
         search = false
         pickFor = null
-        if (folderIcons != before) showToast("changed the icon of ${row.display}") { saveFolderIcons(before) }
+        if (folderIcons != before) showToast("changed the icon of ${spoken(row)}") { saveFolderIcons(before) }
     }
 
     private fun saveQuick(next: List<QuickSlot>) {

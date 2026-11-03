@@ -866,7 +866,13 @@ private fun QuickMenuView(s: LauncherState, pal: Palette) {
                 .tap { }
                 .padding(u.dp(6f)),
         ) {
-            Txt(m.app.display, 11f, pal.muted, Modifier.padding(start = u.dp(12f), top = u.dp(10f), end = u.dp(12f), bottom = u.dp(8f)), spacing = .06f)
+            val mark = s.nameMark(m.app)
+            val head = Modifier.padding(start = u.dp(12f), top = u.dp(10f), end = u.dp(12f), bottom = u.dp(8f))
+            if (mark != null) {
+                Canvas(head.size(u.dp(14f))) { drawQuickIcon(mark, pal.muted, Offset.Zero, size.width, 1.3f * u.k) }
+            } else {
+                Txt(m.app.display, 11f, pal.muted, head, spacing = .06f)
+            }
             m.shortcuts.forEach { info ->
                 val label = (info.shortLabel ?: info.longLabel)?.toString()?.lowercase().orEmpty()
                 MenuItem(label, pal.fg) { s.menuShortcut(info) }

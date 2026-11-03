@@ -61,6 +61,11 @@ class QuickIconsTest {
         assertTrue(!QuickIcons.markOnly(""))
     }
 
+    @Test fun emojiFolderNamesAreSpokenAsWords() {
+        assertEquals("the lock folder", QuickIcons.spokenFolder("🔒"))
+        assertEquals("talk", QuickIcons.spokenFolder("talk"))
+    }
+
     @Test fun everyFolderIconIsDrawn() {
         val all = listOf("🔒", "code", "term", "talk", "browse", "read", "care", "ai", "money", "shop", "watch", "music", "mail",
             "games", "travel", "notes", "tools", "photos", "cloud", "stuff")
