@@ -21,6 +21,14 @@ object Synced {
     /** Wallpaper marker: draw no wallpaper and let the system wallpaper show through. */
     const val SYSTEM_WALL = "@system"
     const val ACTION = "app.detent.launcher.SET_COLORS"
+    /** Re-reads files/live/themes.json: one theme per live wallpaper, appended after the synced theme. */
+    const val RELOAD_LIVE = "app.detent.launcher.RELOAD_LIVE"
+    const val LIVE_GROUP = "live"
+    /** Theme name to the wallpaper package file (in files/live) that Wallpaper Engine opens. */
+    private val liveFiles = mutableMapOf<String, String>()
+
+    fun liveFile(ctx: Context, t: ThemeDef): java.io.File? =
+        liveFiles[t.name]?.let { java.io.File(java.io.File(ctx.filesDir, "live"), it) }?.takeIf { it.isFile }
     private const val PREFS = "detent.synced"
 
     /** Listeners that redraw when the colours change. Called on the main thread. */
@@ -34,11 +42,36 @@ object Synced {
 
     fun isSystemWall(t: ThemeDef) = t.wall == SYSTEM_WALL
 
-    /** Reads the saved colours into the theme list. Call before the first frame. */
+    /** Reads the saved colours and the live themes into the theme list. Call before the first frame. */
     fun load(ctx: Context) {
         val sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (!sp.contains("bg")) return
-        put(sp.getLong("bg", 0), sp.getLong("fg", 0), sp.getLong("accent", 0))
+        if (sp.contains("bg")) put(sp.getLong("bg", 0), sp.getLong("fg", 0), sp.getLong("accent", 0))
+        loadLive(ctx)
+    }
+
+    /**
+     * files/live/themes.json is a list of {name, bg, fg, accent, file}. The live themes always sit at the
+     * end of the list in file order, so saved theme indices stay valid while the file keeps its order.
+     */
+    fun loadLive(ctx: Context): Int {
+        val f = java.io.File(java.io.File(ctx.filesDir, "live"), "themes.json")
+        val list = runCatching { org.json.JSONArray(f.readText()) }.getOrNull() ?: return 0
+        while (THEMES.isNotEmpty() && THEMES.last().group == LIVE_GROUP) {
+            THEMES.removeAt(THEMES.lastIndex); PALETTES.removeAt(PALETTES.lastIndex); THEME_NAMES.removeAt(THEME_NAMES.lastIndex)
+        }
+        liveFiles.clear()
+        for (i in 0 until list.length()) {
+            val o = list.optJSONObject(i) ?: continue
+            val name = o.optString("name").takeIf { it.isNotBlank() } ?: continue
+            val bg = parse(o.optString("bg")) ?: continue
+            val fg = parse(o.optString("fg")) ?: continue
+            val acc = parse(o.optString("accent")) ?: continue
+            val light = Color(bg).luminance() > 0.5f
+            val t = ThemeDef(name, LIVE_GROUP, light, bg, fg, acc, SYSTEM_WALL, blend(fg, bg, 0.3f))
+            THEMES += t; PALETTES += Palette(t); THEME_NAMES += name
+            o.optString("file").takeIf { it.isNotBlank() }?.let { liveFiles[name] = it }
+        }
+        return liveFiles.size
     }
 
     /** Saves new colours. Returns false when a colour does not parse. */
@@ -62,6 +95,7 @@ object Synced {
         val t = theme(bg, fg, accent)
         THEMES[i] = t
         PALETTES[i] = Palette(t)
+        THEME_NAMES[i] = t.name
     }
 
     internal fun parse(s: String?): Long? {
@@ -80,6 +114,13 @@ object Synced {
 /** Takes colours from adb or another app on the device. */
 class ColorsReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
+        if (intent.action == Synced.RELOAD_LIVE) {
+            val n = Synced.loadLive(ctx.applicationContext)
+            Synced.listeners.toList().forEach { it() }
+            resultCode = 1
+            resultData = "live themes: $n"
+            return
+        }
         if (intent.action != Synced.ACTION) return
         val ok = Synced.save(
             ctx.applicationContext,

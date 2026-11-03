@@ -55,8 +55,20 @@
             tools:ignore="ExportedReceiver">
             <intent-filter>
                 <action android:name="app.detent.launcher.SET_COLORS" />
+                <action android:name="app.detent.launcher.RELOAD_LIVE" />
             </intent-filter>
         </receiver>
+
+        <!-- Shares the live wallpaper packages in files/live with the wallpaper app. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.live"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/live_paths" />
+        </provider>
 
         <service
             android:name=".UnreadService"

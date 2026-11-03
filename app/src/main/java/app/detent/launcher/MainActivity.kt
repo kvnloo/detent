@@ -118,6 +118,15 @@ class MainActivity : ComponentActivity(), Host {
         if (home && alreadyHome) state.onHome()
     }
 
+    override fun openLiveWallpaper(theme: ThemeDef): Boolean {
+        val f = Synced.liveFile(applicationContext, theme) ?: return false
+        val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.live", f)
+        val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/octet-stream")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            .setPackage("io.wallpaperengine.weclient")
+        return open(view) || open(view.setPackage(null))
+    }
+
     private val redraw: () -> Unit = { runOnUiThread { recreate() } }
 
     override fun onDestroy() {

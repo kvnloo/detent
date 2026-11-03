@@ -96,6 +96,11 @@ class Prefs(ctx: Context) {
         get() = sp.getString("recent", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         set(v) = sp.edit { putString("recent", v.joinToString("\n")) }
 
+    /** The live theme whose wallpaper was last handed to the wallpaper app. */
+    var appliedLive: String?
+        get() = sp.getString("appliedLive", null)
+        set(v) = sp.edit { putString("appliedLive", v) }
+
     /** The theme and side that the system wallpaper shows now. */
     var appliedWall: String?
         get() = sp.getString("appliedWall", null)

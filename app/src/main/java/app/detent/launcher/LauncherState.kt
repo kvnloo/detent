@@ -81,6 +81,9 @@ class DialHint(val app: AppEntry, val add: Boolean, val count: Int)
 
 /** The calls that need the activity. */
 interface Host {
+    /** Hands a live wallpaper package to its wallpaper app, which asks to apply it. */
+    fun openLiveWallpaper(theme: ThemeDef): Boolean
+
     fun launchApp(app: AppEntry, bounds: Rect?)
 
     /** True when an app on the phone can search the web. */
@@ -960,9 +963,17 @@ class LauncherState(
             persist()
             host.cleanWallpapers(customWall)
             syncWallpaper()
+            syncLive()
             showClock()
         }
         run()
+    }
+
+    /** A live theme asks its wallpaper app to switch, once per change of theme. */
+    private fun syncLive() {
+        val t = THEMES[cfg.theme]
+        if (t.group != Synced.LIVE_GROUP || prefs.appliedLive == t.name) return
+        if (host.openLiveWallpaper(t)) prefs.appliedLive = t.name
     }
 
     /** Copies the theme to the lock screen when the theme or the side changed since the last copy. */

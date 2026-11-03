@@ -140,7 +140,7 @@ val THEMES: MutableList<ThemeDef> = mutableListOf(
     Synced.theme(0xFF181F23, 0xFFD1DEDA, 0xFFC8BE72),
 )
 
-val THEME_NAMES = THEMES.map { it.name }
+val THEME_NAMES: MutableList<String> = THEMES.mapTo(mutableListOf()) { it.name }
 
 /** Mixes [a] into [b]. t = 1 gives [a]. */
 fun mix(a: Color, b: Color, t: Float) = Color(
