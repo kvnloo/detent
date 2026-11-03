@@ -57,15 +57,14 @@ jobs:
           profile: pixel_2
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -PdetentId=app.detent.launcher.lab -PdetentChannel=nightly -PdetentCommit=$(git rev-parse HEAD) -PdetentRun=$GITHUB_RUN_ID
-      - name: Record the actual tested tree
+          # Tests and evidence capture share the emulator session; adb after it ends would hang.
+          script: bash scripts/integration-run.sh
+      - name: Record the actual tested tree (no adb here; the emulator is already gone)
         if: always()
+        timeout-minutes: 1
         run: |
           mkdir -p integration-evidence
           git rev-parse HEAD > integration-evidence/source-sha.txt
-          adb logcat -d -t 2000 > integration-evidence/logcat.txt || true
-          adb exec-out screencap -p > integration-evidence/screen.png || true
-          adb pull /sdcard/Android/data/app.detent.launcher.lab/files/test-evidence integration-evidence/ || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
