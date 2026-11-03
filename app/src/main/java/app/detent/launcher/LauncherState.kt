@@ -81,6 +81,9 @@ class DialHint(val app: AppEntry, val add: Boolean, val count: Int)
 
 /** The calls that need the activity. */
 interface Host {
+    /** Blurs what is behind the window (a live wallpaper), or stops blurring when [glass] is off. */
+    fun setGlassBlur(glass: Glass)
+
     /** Hands a live wallpaper package to its wallpaper app, which asks to apply it. */
     fun openLiveWallpaper(theme: ThemeDef): Boolean
 
@@ -292,6 +295,17 @@ class LauncherState(
         private set
     var webSearch by mutableStateOf(prefs.webSearch)
         private set
+
+    /** The grid layouts draw their dot field and shade at this strength, from 0 to 1. */
+    var gridVis by mutableFloatStateOf(prefs.gridVis)
+        private set
+
+    /** Liquid glass over a see-through theme. */
+    var glass by mutableStateOf(Glass.of(prefs.glass))
+        private set
+
+    /** True when the theme lets the system wallpaper through, so glass has something to frost. */
+    val seeThrough get() = Synced.isSystemWall(THEMES[cfg.theme]) && (customWall == null || layout.grid)
 
     /** True when Detent hides the Android status bar and shows battery, wifi, and signal itself. */
     var ownBar by mutableStateOf(prefs.ownBar)
@@ -964,6 +978,7 @@ class LauncherState(
             host.cleanWallpapers(customWall)
             syncWallpaper()
             syncLive()
+            syncGlass()
             showClock()
         }
         run()
@@ -1010,6 +1025,24 @@ class LauncherState(
         prefs.lockWall = lockWall
         if (!lockWall) prefs.appliedWall = null
     }
+
+    fun cycleGrid() {
+        tap()
+        val steps = floatArrayOf(1f, .7f, .45f, .25f, 0f)
+        val i = steps.indexOfFirst { kotlin.math.abs(it - gridVis) < .01f }
+        gridVis = steps[(i + 1) % steps.size]
+        prefs.gridVis = gridVis
+    }
+
+    fun cycleGlass() {
+        tap()
+        glass = glass.next()
+        prefs.glass = glass.name
+        syncGlass()
+    }
+
+    /** Blurs behind the window only when the theme shows the system wallpaper. */
+    fun syncGlass() = host.setGlassBlur(if (seeThrough) glass else Glass.Off)
 
     fun setBar(own: Boolean) {
         tap()

@@ -96,6 +96,16 @@ class Prefs(ctx: Context) {
         get() = sp.getString("recent", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         set(v) = sp.edit { putString("recent", v.joinToString("\n")) }
 
+    /** How strongly the grid layouts draw their dot field and shade, from 0 to 1. */
+    var gridVis: Float
+        get() = sp.getFloat("gridVis", 1f)
+        set(v) = sp.edit { putFloat("gridVis", v) }
+
+    /** The liquid glass preset, by [Glass] name. */
+    var glass: String
+        get() = sp.getString("glass", "Off") ?: "Off"
+        set(v) = sp.edit { putString("glass", v) }
+
     /** The live theme whose wallpaper was last handed to the wallpaper app. */
     var appliedLive: String?
         get() = sp.getString("appliedLive", null)

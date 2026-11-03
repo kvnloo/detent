@@ -1,5 +1,6 @@
 package app.detent.launcher.ui
 
+import kotlin.math.roundToInt
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -77,7 +78,7 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
     }
 
     // The feel step has one more row of chips.
-    val controlsY = u.navY - if (step == Step.FEEL) 218f else 170f
+    val controlsY = u.navY - if (step == Step.FEEL) 266f else 170f
     Box(Modifier.fillMaxSize()) {
         if (step == Step.APPS) Box(Modifier.fillMaxSize().background(pal.veil))
         if (step == Step.SHAPE || step == Step.THEME || step == Step.FEEL) {
@@ -140,6 +141,10 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
                     Row(horizontalArrangement = gap) {
                         Chip("system bar", !s.ownBar, pal, { s.setBar(false) })
                         Chip("detent bar", s.ownBar, pal, { s.setBar(true) })
+                    }
+                    Row(horizontalArrangement = gap) {
+                        Chip("grid ${(s.gridVis * 100).roundToInt()}%", s.gridVis > 0f, pal, { s.cycleGrid() })
+                        Chip("glass · ${s.glass.label}", s.glass.on, pal, { s.cycleGlass() })
                     }
                     Row(horizontalArrangement = gap) {
                         Chip("voice", s.voice, pal, { s.toggleVoice() })

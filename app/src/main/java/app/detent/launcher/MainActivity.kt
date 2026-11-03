@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity(), Host {
     override fun onResume() {
         super.onResume()
         state.onResume()
+        state.syncGlass()
     }
 
     override fun onPause() {
@@ -116,6 +117,12 @@ class MainActivity : ComponentActivity(), Host {
         val home = intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)
         val alreadyHome = hasWindowFocus() && intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT == 0
         if (home && alreadyHome) state.onHome()
+    }
+
+    override fun setGlassBlur(glass: Glass) {
+        if (Build.VERSION.SDK_INT < 31) return
+        val on = glass.on && windowManager.isCrossWindowBlurEnabled
+        window.setBackgroundBlurRadius(if (on) glass.blurPx(screenSize().first) else 0)
     }
 
     override fun openLiveWallpaper(theme: ThemeDef): Boolean {

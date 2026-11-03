@@ -184,7 +184,7 @@ private fun Home(s: LauncherState) {
     }
 
     Box(
-        Modifier.fillMaxSize().background(if (THEMES[wall].wall == app.detent.launcher.Synced.SYSTEM_WALL && (s.customWall == null || s.layout.grid)) bg.copy(alpha = if (s.layout.grid) .45f else 0f) else bg)
+        Modifier.fillMaxSize().background(if (THEMES[wall].wall == app.detent.launcher.Synced.SYSTEM_WALL && (s.customWall == null || s.layout.grid)) bg.copy(alpha = seeThroughShade(s)) else bg)
             .focusRequester(focus).focusable()
             .onKeyEvent { it.type == KeyEventType.KeyDown && s.key(it.key) },
     ) {
@@ -255,6 +255,13 @@ private fun rememberAsset(path: String): Pair<String, ImageBitmap>? {
     var shown by remember { mutableStateOf<Pair<String, ImageBitmap>?>(null) }
     LaunchedEffect(path) { Walls.load(ctx, path)?.let { shown = path to it } }
     return shown
+}
+
+/** The shade over a see-through theme: the glass tint, or the grid's own shade scaled by its visibility. */
+private fun seeThroughShade(s: LauncherState): Float {
+    val grid = s.layout.grid
+    val base = if (s.glass.on) s.glass.tintA else if (grid) .45f else 0f
+    return if (grid) base * (.35f + .65f * s.gridVis) else base
 }
 
 @Composable

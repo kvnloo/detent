@@ -22,7 +22,11 @@ val Ease = CubicBezierEasing(.2f, .8f, .2f, 1f)
 fun mod(a: Int, n: Int) = ((a % n) + n) % n
 fun mod(a: Float, n: Float) = ((a % n) + n) % n
 
-enum class Markers { Double, Ticks, Nodes, Dots }
+/**
+ * Bezel is a ring of lit glass with etched ticks, Comet swells the marks into a tail around the notch,
+ * Spokes is a watch bezel of inward ticks, and Wave rolls the marks on a travelling wave as the dial turns.
+ */
+enum class Markers { Double, Ticks, Nodes, Dots, Bezel, Comet, Spokes, Wave }
 enum class Side { Right, Left }
 
 /**
@@ -63,6 +67,11 @@ val LAYOUTS = listOf(
     Layout("grid · field", 300f, Markers.Double, 1, Kind.Field),
     Layout("grid · lens", 300f, Markers.Double, 1, Kind.Lens),
     Layout("grid · readout", 200f, Markers.Double, 1, Kind.Readout),
+    // Added after the stock layouts so saved layout numbers keep their meaning.
+    Layout("glass · radial · bezel", 270f, Markers.Bezel, 4),
+    Layout("orbit · radial · comet", 300f, Markers.Comet, 3),
+    Layout("watch · radial · spokes", 180f, Markers.Spokes, 10),
+    Layout("liquid · radial · wave", 400f, Markers.Wave, 8),
 )
 
 // The grid layouts. Grid dots sit every G units, starting GO units from the top left corner.
@@ -209,6 +218,9 @@ fun labelScale(a: Float, chars: Int): Float {
 fun labelRadius(g: Geo, m: Markers) = g.r - when (m) {
     Markers.Ticks -> 28f
     Markers.Double -> 34f
+    Markers.Bezel -> 40f
+    Markers.Spokes -> 34f
+    Markers.Wave -> 30f
     else -> 22f
 }
 
