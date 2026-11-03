@@ -6,7 +6,8 @@ import android.graphics.BitmapFactory
 import android.text.format.DateFormat
 import android.util.LruCache
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -121,6 +122,7 @@ import app.detent.launcher.Step
 import app.detent.launcher.THEMES
 import app.detent.launcher.ThemeDef
 import app.detent.launcher.handMatrix
+import app.detent.launcher.wallpaperDirection
 import app.detent.launcher.W
 import app.detent.launcher.mod
 import kotlinx.coroutines.Dispatchers
@@ -167,12 +169,9 @@ fun DetentRoot(s: LauncherState) {
 @Composable
 private fun Home(s: LauncherState) {
     val themeStep = s.ob == Step.THEME
-    val live = if (themeStep) mod(s.index, THEMES.size) else s.cfg.theme
+    val row = if (themeStep) s.themeJump ?: s.index else s.cfg.theme
+    val live = mod(row, THEMES.size)
     val pal = PALETTES[live]
-    // While the theme dial turns, colours follow every tick. The wallpaper waits until the dial stops.
-    var wall by remember { mutableIntStateOf(live) }
-    val idle = s.spin == Spin.Idle
-    LaunchedEffect(live, idle, themeStep) { if (!themeStep || idle) wall = live }
     val bg by animateColorAsState(pal.bg, tween(400), label = "bg")
     SystemBars(pal.light, s.ownBar, s.resumed)
 
@@ -188,7 +187,10 @@ private fun Home(s: LauncherState) {
     }
 
     Box(
-        Modifier.fillMaxSize().background(if (THEMES[wall].wall == app.detent.launcher.Synced.SYSTEM_WALL && (s.customWall == null || s.layout.grid)) bg.copy(alpha = seeThroughShade(s)) else bg)
+        Modifier.fillMaxSize().background(
+            if (!s.layout.grid) Color.Transparent
+            else if (app.detent.launcher.Synced.isSystemWall(THEMES[live])) bg.copy(alpha = seeThroughShade(s)) else bg,
+        )
             .focusRequester(focus).focusable()
             .onKeyEvent { it.type == KeyEventType.KeyDown && s.key(it.key) },
     ) {
@@ -197,7 +199,7 @@ private fun Home(s: LauncherState) {
         val wave = rememberVoiceWave(s)
         val ctx = LocalContext.current
         val status = remember { DeviceStatus(ctx.applicationContext) }
-        if (!grid) Wallpaper(THEMES[wall], pal, s.left, s.customWall)
+        if (!grid) Wallpaper(THEMES[live], pal, s.left, s.customWall, row, themeStep, s.themeJump != null, seeThroughShade(s))
         GestureLayer(s)
         if (grid) {
             DotGrid(s, pal, wave, status)
@@ -223,6 +225,7 @@ private fun Home(s: LauncherState) {
         Title(s, pal)
         HintCard(s, pal)
         ToastView(s, pal)
+        ThemeImportSheet(s, pal)
     }
 }
 
@@ -256,14 +259,18 @@ private object Walls {
     }?.also { cache.put(path, it) }
 }
 
-/** The last loaded image for [path]. The previous image stays until the next one is ready. */
-@Composable
-private fun rememberAsset(path: String): Pair<String, ImageBitmap>? {
-    val ctx = LocalContext.current
-    var shown by remember { mutableStateOf<Pair<String, ImageBitmap>?>(null) }
-    LaunchedEffect(path) { Walls.load(ctx, path)?.let { shown = path to it } }
-    return shown
-}
+/** A complete backdrop, kept intact until the next image has decoded. */
+private data class WallFrame(
+    val theme: ThemeDef,
+    val pal: Palette,
+    val path: String,
+    val image: ImageBitmap?,
+    val left: Boolean,
+    val row: Int,
+    val preview: Boolean,
+    val jump: Boolean,
+    val shade: Float,
+)
 
 /** The shade over a see-through theme: the glass tint, or the grid's own shade scaled by its visibility. */
 private fun seeThroughShade(s: LauncherState): Float {
@@ -273,48 +280,76 @@ private fun seeThroughShade(s: LauncherState): Float {
 }
 
 @Composable
-private fun Wallpaper(t: ThemeDef, pal: Palette, left: Boolean, custom: String?) {
-    val wall = custom ?: t.wall
-    if (wall == null) {
-        HandArt(pal, left)
-        return
+private fun Wallpaper(
+    t: ThemeDef, pal: Palette, left: Boolean, custom: String?, row: Int,
+    preview: Boolean, jump: Boolean, shade: Float,
+) {
+    val path = custom ?: (if (preview && t.preview != null) t.preview else if (left) t.wallLeft ?: t.wall else t.wall) ?: "hands.webp"
+    val ctx = LocalContext.current
+    val request = WallFrame(t, pal, path, null, left, row, preview, jump, shade)
+    var ready by remember { mutableStateOf<WallFrame?>(null) }
+    LaunchedEffect(request) {
+        val image = if (path == app.detent.launcher.Synced.SYSTEM_WALL) null else Walls.load(ctx, path)
+        // Failed or cancelled loads never replace a good image with a blank frame.
+        if (image != null || path == app.detent.launcher.Synced.SYSTEM_WALL) ready = request.copy(image = image)
     }
-    // The synced theme draws only the shade; the system (live) wallpaper shows through the window.
-    if (wall != app.detent.launcher.Synced.SYSTEM_WALL) {
-        val img = rememberAsset(if (custom == null && left && t.wallLeft != null) t.wallLeft else wall)
-        Crossfade(img, animationSpec = tween(450), label = "wall") { p ->
-            if (p != null) Image(p.second, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        }
+    val frame = ready ?: request
+    AnimatedContent(
+        targetState = frame,
+        modifier = Modifier.fillMaxSize().clip(androidx.compose.ui.graphics.RectangleShape),
+        contentKey = { listOf(it.theme, it.path, it.left, it.image, it.shade) },
+        transitionSpec = {
+            val direction = wallpaperDirection(
+                initialState.row, targetState.row, initialState.path, targetState.path,
+                initialState.preview && targetState.preview, targetState.jump,
+            )
+            if (direction == 0) {
+                fadeIn(tween(320)) togetherWith fadeOut(tween(320))
+            } else {
+                // Increasing rows follow an upward swipe: old exits above, new arrives from below.
+                (slideInVertically(tween(420, easing = Ease)) { it * direction } + fadeIn(tween(180))) togetherWith
+                    (slideOutVertically(tween(420, easing = Ease)) { -it * direction } + fadeOut(tween(420)))
+            }.using(null)
+        },
+        label = "wallpaper",
+    ) { shown ->
+        WallpaperFrame(shown)
     }
-    val b = pal.bg
-    Box(
-        Modifier.fillMaxSize().background(
-            Brush.verticalGradient(
-                0f to b.copy(alpha = .6f), .32f to b.copy(alpha = .15f), .7f to b.copy(alpha = .2f), 1f to b.copy(alpha = .75f),
-            ),
-        ),
-    )
-    // The side with the dial is darker, so the labels stay readable.
-    val near = b.copy(alpha = .86f)
-    val far = b.copy(alpha = .2f)
-    Box(
-        Modifier.fillMaxSize().background(
-            Brush.horizontalGradient(0f to (if (left) near else far), .5f to b.copy(alpha = .5f), 1f to (if (left) far else near)),
-        ),
-    )
 }
 
-/** The dot-hand art, tinted so the dots take the hand colour and the black takes the background colour. */
 @Composable
-private fun HandArt(pal: Palette, left: Boolean) {
-    val img = rememberAsset("hands.webp") ?: return
-    val m = ColorMatrix(handMatrix(pal))
-    Image(
-        img.second, null,
-        Modifier.fillMaxSize().graphicsLayer { scaleX = if (left) -1f else 1f },
-        contentScale = ContentScale.Crop,
-        colorFilter = ColorFilter.colorMatrix(m),
-    )
+private fun WallpaperFrame(frame: WallFrame) {
+    val pal = frame.pal
+    val left = frame.left
+    val system = frame.path == app.detent.launcher.Synced.SYSTEM_WALL
+    Box(Modifier.fillMaxSize().background(if (system) pal.bg.copy(alpha = frame.shade) else pal.bg)) {
+        val image = frame.image
+        val hand = frame.path == "hands.webp"
+        if (image != null) Image(
+            image, null,
+            Modifier.fillMaxSize().graphicsLayer { scaleX = if (hand && left) -1f else 1f },
+            contentScale = ContentScale.Crop,
+            colorFilter = if (hand) ColorFilter.colorMatrix(ColorMatrix(handMatrix(pal))) else null,
+        )
+        if (!hand) {
+            val b = pal.bg
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        0f to b.copy(alpha = .6f), .32f to b.copy(alpha = .15f), .7f to b.copy(alpha = .2f), 1f to b.copy(alpha = .75f),
+                    ),
+                ),
+            )
+            // The shade travels with its image, rather than tinting the outgoing wallpaper with the new palette.
+            val near = b.copy(alpha = .86f)
+            val far = b.copy(alpha = .2f)
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.horizontalGradient(0f to (if (left) near else far), .5f to b.copy(alpha = .5f), 1f to (if (left) far else near)),
+                ),
+            )
+        }
+    }
 }
 
 // Input.

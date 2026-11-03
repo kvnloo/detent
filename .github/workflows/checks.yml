@@ -17,7 +17,7 @@ concurrency:
 jobs:
   apk:
     name: APK and unit tests
-    runs-on: avrea-ubuntu-latest-4-vcpu
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -72,7 +72,7 @@ jobs:
     name: checks
     if: always()
     needs: [apk, integration]
-    runs-on: avrea-ubuntu-latest-2-vcpu
+    runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Fail closed for every applicable lane

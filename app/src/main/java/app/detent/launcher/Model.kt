@@ -1,6 +1,7 @@
 package app.detent.launcher
 
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import kotlin.math.cos
@@ -135,6 +136,11 @@ class ThemeDef(
     hand: Long = 0xFF504945,
     /** Wallpaper crop for a left-hand dial, when it differs. */
     val wallLeft: String? = null,
+    /** Imported live themes use a still only in the picker; home remains see-through. */
+    val preview: String? = null,
+    val liveSource: String? = null,
+    val mobilePackage: String? = null,
+    val importId: String? = null,
 ) {
     val bg = Color(bg)
     val fg = Color(fg)
@@ -148,7 +154,7 @@ private fun phone(name: String, light: Boolean, bg: Long, fg: Long, acc: Long, h
 private fun omarchy(name: String, light: Boolean, bg: Long, fg: Long, acc: Long) =
     ThemeDef(name, "omarchy", light, bg, fg, acc, "walls/$name.webp")
 
-val THEMES: MutableList<ThemeDef> = mutableListOf(
+val THEMES: MutableList<ThemeDef> = mutableStateListOf(
     phone("dusk", false, 0xFF1D2021, 0xFFEBDBB2, 0xFFFE8019, 0xFF504945),
     phone("ember", false, 0xFF000000, 0xFFEBE5DC, 0xFFDF6124, 0xFF3A3733),
     phone("signal", false, 0xFF000000, 0xFFFFFFFF, 0xFFFF453A, 0xFF3A3A3A),

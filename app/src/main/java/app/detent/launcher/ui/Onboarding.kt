@@ -54,6 +54,7 @@ import app.detent.launcher.Palette
 import app.detent.launcher.Side
 import app.detent.launcher.Step
 import app.detent.launcher.ThemeDef
+import app.detent.launcher.THEMES
 import kotlinx.coroutines.launch
 
 private class Copy(val counter: String, val title: String, val body: String)
@@ -178,9 +179,14 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
                     }
                 }
                 Step.THEME -> {
-                    Row(horizontalArrangement = gap) {
+                    FlowRow(horizontalArrangement = gap, verticalArrangement = gap) {
                         Chip("phone", theme.group == "phone", pal, { s.jumpGroup("phone") }, weight = FontWeight.Medium)
                         Chip("omarchy", theme.group == "omarchy", pal, { s.jumpGroup("omarchy") }, weight = FontWeight.Medium)
+                        if (THEMES.any { it.group == "live" }) Chip("live", theme.group == "live", pal, { s.jumpGroup("live") })
+                        if (THEMES.any { it.group == "imported" }) Chip("imported", theme.group == "imported", pal, { s.jumpGroup("imported") })
+                        HoldChip("import +", false, pal, listOf("paste a link"), 0,
+                            { s.openThemeImport() }, { s.openThemeImport() }, title = "theme collections",
+                            note = "paste a public repo or collection link, or share one to Detent")
                     }
                     // The grid layouts have no wallpaper.
                     if (!s.layout.grid) Row(horizontalArrangement = gap) {
