@@ -1462,10 +1462,19 @@ class LauncherState(
     }
 
     /** Sets the dial apps and keeps the selected app under the notch. */
-    private fun setAppsKeep(next: Set<String>) {
-        val cur = curApp()
-        if (cur != null && folderKey == null) {
-            val ni = rowsFor(next).indexOfFirst { it.key == cur.key }
+    private fun setAppsKeep(next: Set<String>) = setRows(next, null, curApp()?.key)
+
+    /**
+     * Sets the dial rows and, when [nextOrder] is not null, their order. The row [keep] stays under the notch.
+     * Read [keep] before any change to the rows: a new order or folder moves what the notch points at.
+     */
+    private fun setRows(next: Set<String>, nextOrder: List<String>?, keep: String?) {
+        if (nextOrder != null) {
+            order = nextOrder
+            prefs.order = nextOrder
+        }
+        if (keep != null && folderKey == null) {
+            val ni = rowsFor(next).indexOfFirst { it.key == keep }
             if (ni >= 0) reindex(ni)
         }
         dialKeys = next
@@ -1739,11 +1748,10 @@ class LauncherState(
 
     /** Puts dial, order, folders and swipes back as they were. */
     private fun restore(keys: Set<String>, ord: List<String>, fs: List<Folder>, sw: Map<String, String>) {
+        val cur = curApp()?.key
         saveFolders(fs)
         saveSwipes(sw)
-        order = ord
-        prefs.order = ord
-        setAppsKeep(keys)
+        setRows(keys, ord, cur)
     }
 
     /** What the search sheet gathers apps for, or null. */
@@ -1852,10 +1860,8 @@ class LauncherState(
             }
         }
         saveFolders(folders + f)
-        order = nextOrder
-        prefs.order = nextOrder
         swipes[row]?.let { saveSwipes(swipes - row) }
-        setAppsKeep(nextKeys)
+        setRows(nextKeys, nextOrder, f.key)
         fb.double()
         fb.click(false)
         showToast("made folder $name, swipe it to open") { restore(beforeKeys, beforeOrder, beforeFolders, beforeSwipes) }
@@ -1869,10 +1875,8 @@ class LauncherState(
         val beforeFolders = folders
         val add = kids.map { it.key }.filter { it !in dialKeys }
         val nextOrder = rows.map { it.key }.flatMap { if (it == row.key) add else listOf(it) }
-        order = nextOrder
-        prefs.order = nextOrder
         saveFolders(folders.filter { it.key != row.key })
-        setAppsKeep(dialKeys - row.key + add)
+        setRows(dialKeys - row.key + add, nextOrder, add.firstOrNull())
         fb.double()
         showToast("ungrouped ${row.display}") { restore(beforeKeys, beforeOrder, beforeFolders, swipes) }
     }
