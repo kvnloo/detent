@@ -103,6 +103,9 @@ object QuickIcons {
         return votes.maxByOrNull { it.value }?.key ?: "star"
     }
 
+    /** [name] for a sentence: an emoji-only folder name becomes words, like "the lock folder". */
+    fun spokenFolder(name: String) = if (markOnly(name)) "the ${forFolder(name, emptyList())} folder" else name
+
     /** True when [name] has no letter or digit, like an emoji. The dial then shows only the icon. */
     fun markOnly(name: String) = name.isNotBlank() && name.none { it.isLetterOrDigit() }
 }
