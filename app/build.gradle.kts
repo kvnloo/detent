@@ -11,14 +11,25 @@ val buildRun = providers.gradleProperty("detentRun").orElse("local").get()
 require(sourceSha == "local" || sourceSha.matches(Regex("[0-9a-f]{40}")))
 require(channel in setOf("local", "candidate", "preview", "nightly", "stable"))
 require(buildRun == "local" || buildRun.matches(Regex("[0-9]+")))
-val identityAssets = layout.buildDirectory.dir("generated/detentIdentity")
-val writeBuildIdentity by tasks.registering {
-    inputs.properties(mapOf("sha" to sourceSha, "channel" to channel, "run" to buildRun))
-    outputs.dir(identityAssets)
-    doLast {
-        val dir = identityAssets.get().asFile.apply { mkdirs() }
-        dir.resolve("detent-build.json").writeText("""{"source_sha":"$sourceSha","channel":"$channel","run_id":"$buildRun"}""")
+abstract class WriteBuildIdentity : DefaultTask() {
+    @get:org.gradle.api.tasks.Input abstract val revision: org.gradle.api.provider.Property<String>
+    @get:org.gradle.api.tasks.Input abstract val buildChannel: org.gradle.api.provider.Property<String>
+    @get:org.gradle.api.tasks.Input abstract val runId: org.gradle.api.provider.Property<String>
+    @get:org.gradle.api.tasks.OutputDirectory abstract val outputDirectory: org.gradle.api.file.DirectoryProperty
+
+    @org.gradle.api.tasks.TaskAction
+    fun writeIdentity() {
+        val dir = outputDirectory.get().asFile.apply { mkdirs() }
+        dir.resolve("detent-build.json").writeText(
+            """{"source_sha":"${revision.get()}","channel":"${buildChannel.get()}","run_id":"${runId.get()}"}""",
+        )
     }
+}
+val writeBuildIdentity = tasks.register<WriteBuildIdentity>("writeBuildIdentity") {
+    revision.set(sourceSha)
+    buildChannel.set(channel)
+    runId.set(buildRun)
+    outputDirectory.set(layout.buildDirectory.dir("generated/detentIdentity"))
 }
 
 android {
@@ -69,8 +80,6 @@ android {
         buildConfig = true
     }
 
-    sourceSets["main"].assets.srcDir(identityAssets)
-
     androidResources {
         // The wallpapers are already compressed WebP files.
         noCompress += "webp"
@@ -81,7 +90,11 @@ android {
     }
 }
 
-tasks.named("preBuild") { dependsOn(writeBuildIdentity) }
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(writeBuildIdentity, WriteBuildIdentity::outputDirectory)
+    }
+}
 
 kotlin {
     compilerOptions {
