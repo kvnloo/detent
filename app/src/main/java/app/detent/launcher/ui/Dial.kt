@@ -93,7 +93,8 @@ private fun DrawScope.drawMarks(pos: Float, g: Geo, k: Float, pal: Palette, layo
     }
     if (m == Markers.Spokes) {
         drawCircle(pal.rim2, g.r * k, Offset(x(g.cx), g.cy * k), style = Stroke(.8f * k))
-        drawCircle(pal.rim, (g.r - 26) * k, Offset(x(g.cx), g.cy * k), style = Stroke(.6f * k))
+        // A second ring outside the rim, clear of the names.
+        drawCircle(pal.rim, (g.r + 9) * k, Offset(x(g.cx), g.cy * k), style = Stroke(.6f * k))
     }
     val tpa = layout.ticksPerApp
     val first = ceil((pos - g.span) * tpa).toInt()
@@ -152,8 +153,8 @@ private fun DrawScope.drawMarks(pos: Float, g: Geo, k: Float, pal: Palette, layo
             }
             Markers.Comet -> {
                 // The marks swell into a bright head at the notch and a tail on either side.
-                val t = exp(-a * 1.1f)
-                val size = (if (major) 2.6f + 8.5f * t else 1.4f + 3f * t) + v * 6f
+                val t = exp(-a * .8f)
+                val size = (if (major) 3f + 10f * t else 1.6f + 4f * t) + v * 6f
                 val c = if (hot) pal.accent else lerp(pal.dotMaj, pal.accent, max(t * t, hue))
                 drawCircle(c, size / 2 * k, Offset(x(px), py * k), alpha = max((.18f + .82f * t) * fade, hue))
             }

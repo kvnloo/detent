@@ -88,6 +88,8 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
     val controlsY = u.navY - when {
         step == Step.FEEL -> 266f
         step == Step.SHAPE && s.customOpen -> 300f
+        // Two rows of layout numbers.
+        step == Step.SHAPE -> 216f
         else -> 170f
     }
     Box(Modifier.fillMaxSize()) {
@@ -95,7 +97,8 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
         if (step == Step.SHAPE || step == Step.THEME || step == Step.FEEL) {
             Box(
                 Modifier.fillMaxWidth().place(u, 0f, controlsY - 70f).height(u.dp(u.hd - controlsY + 70f))
-                    .background(Brush.verticalGradient(0f to pal.bg.copy(alpha = 0f), .3f to pal.bg, 1f to pal.bg)),
+                    // Solid from the first row of controls down, so dial labels never show through them.
+                    .background(Brush.verticalGradient(0f to pal.bg.copy(alpha = 0f), (70f / (u.hd - controlsY + 70f)) to pal.bg, 1f to pal.bg)),
             )
         }
 
