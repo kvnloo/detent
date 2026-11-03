@@ -369,7 +369,7 @@ private fun IconStep(s: LauncherState, pal: Palette, app: AppEntry) {
         }
     }
     Txt(
-        "pick an icon for the quick button", 11f, pal.muted,
+        if (app.kids != null) "pick an icon for the folder" else "pick an icon for the quick button", 11f, pal.muted,
         Modifier.padding(start = u.dp(28f), top = u.dp(16f), end = u.dp(18f), bottom = u.dp(16f)),
         spacing = .06f, maxLines = 1,
     )

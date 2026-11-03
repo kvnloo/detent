@@ -51,4 +51,61 @@ object QuickIcons {
         return words.firstOrNull { (_, w) -> w.any { hit(it, names) } }?.first
             ?: words.firstOrNull { (_, w) -> w.any { ' ' !in it && hit(it, parts) } }?.first
     }
+
+    // Folder names name a kind of app, not an app. These words start a word of the folder name.
+    private val folderWords = listOf(
+        "lock" to listOf("lock", "key", "vault", "pass", "auth", "2fa", "secur", "privacy"),
+        "code" to listOf("code", "dev", "git", "build"),
+        "terminal" to listOf("term", "shell", "ssh"),
+        "chat" to listOf("talk", "chat", "social", "messag", "friend", "people"),
+        "globe" to listOf("brows", "web", "news", "explore", "surf"),
+        "book" to listOf("read", "book", "learn", "study", "school"),
+        "heart" to listOf("care", "health", "fit", "body", "sleep", "well"),
+        "bolt" to listOf("ai", "agent", "bot", "llm"),
+        "card" to listOf("money", "financ", "bank", "pay", "wallet"),
+        "bag" to listOf("shop", "store", "buy"),
+        "play" to listOf("watch", "video", "media", "stream", "tv"),
+        "music" to listOf("music", "listen", "audio"),
+        "mail" to listOf("mail", "email", "inbox"),
+        "game" to listOf("game", "fun"),
+        "pin" to listOf("travel", "map", "go", "trip", "ride"),
+        "note" to listOf("note", "write", "work", "todo", "task", "plan"),
+        "gear" to listOf("tool", "util", "setting", "system"),
+        "photo" to listOf("photo", "pic", "image", "art"),
+        "cloud" to listOf("cloud", "file", "drive"),
+    )
+
+    // Emoji that people use as folder names, and the hairline icon that stands for each.
+    private val emoji = mapOf(
+        "🔒" to "lock", "🔐" to "lock", "🔑" to "lock", "🗝" to "lock", "🛡" to "lock",
+        "💬" to "chat", "🗨" to "chat", "📱" to "phone", "📞" to "phone", "✉" to "mail", "📧" to "mail",
+        "🌐" to "globe", "🌍" to "globe", "🌎" to "globe", "🌏" to "globe", "📍" to "pin", "🗺" to "pin",
+        "❤" to "heart", "💙" to "heart", "🩺" to "heart", "💪" to "heart",
+        "🎵" to "music", "🎶" to "music", "🎧" to "headphones", "▶" to "play", "📺" to "play", "🎬" to "play",
+        "📷" to "camera", "📸" to "camera", "🖼" to "photo", "📅" to "calendar", "🗓" to "calendar",
+        "⏰" to "clock", "🕐" to "clock", "📝" to "note", "📚" to "book", "📖" to "book",
+        "💻" to "code", "⌨" to "terminal", "💳" to "card", "💰" to "card", "🛍" to "bag", "🛒" to "bag",
+        "⚙" to "gear", "🔧" to "gear", "☀" to "sun", "⭐" to "star", "⚡" to "bolt", "🤖" to "bolt",
+        "🏠" to "home", "🔔" to "bell", "👤" to "user", "🎮" to "game", "☁" to "cloud",
+    )
+
+    /**
+     * The icon for a folder named [name] that holds apps with the names and packages in [kids]. An emoji name
+     * gives its icon, then a word of the name, then the icon that most of the apps share. Never null: a folder
+     * of unknown apps gets the star.
+     */
+    fun forFolder(name: String, kids: List<Pair<String, String>>): String {
+        emoji.entries.firstOrNull { name.contains(it.key) }?.let { return it.value }
+        val tokens = name.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+        folderWords.firstOrNull { (_, w) -> w.any { p -> tokens.any { t -> if (p.length <= 2) t == p else t.startsWith(p) } } }
+            ?.let { return it.first }
+        val votes = kids.mapNotNull { (l, p) -> suggest(l, p) }.groupingBy { it }.eachCount()
+        return votes.maxByOrNull { it.value }?.key ?: "star"
+    }
+
+    /** True when [name] has no letter or digit, like an emoji. The dial then shows only the icon. */
+    fun markOnly(name: String) = name.isNotBlank() && name.none { it.isLetterOrDigit() }
 }
+
+/** The saved folder icon that shows the name without an icon. */
+const val NO_ICON = "-"

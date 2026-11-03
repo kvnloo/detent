@@ -266,6 +266,10 @@ class LauncherState(
     var folders by mutableStateOf(prefs.folders)
         private set
 
+    /** The icons that the owner picked for folders: folder id to icon name, or [NO_ICON]. */
+    var folderIcons by mutableStateOf(prefs.folderIcons)
+        private set
+
     /** What a sideways swipe on a dial row opens: row key to app key. */
     var swipes by mutableStateOf(prefs.swipes)
         private set
@@ -475,6 +479,30 @@ class LauncherState(
         val kids = f.keys.mapNotNull { byKey[it] }
         val cover = kids.firstOrNull() ?: return null
         return AppEntry(f.key, f.name.lowercase(), cover.component, cover.user, f.key, kids)
+    }
+
+    /**
+     * The icon that the dial shows beside a folder row, or null for a plain app or a folder without an icon.
+     * A folder without a picked icon takes the icon that fits its name or its apps.
+     */
+    fun rowIcon(row: AppEntry): String? {
+        val kids = row.kids ?: return null
+        val picked = folderIcons[row.key.removePrefix(FOLDER)]
+        if (picked == NO_ICON) return null
+        if (picked != null && picked in QuickIcons.names) return picked
+        return QuickIcons.forFolder(row.label, kids.map { it.label to it.component.packageName })
+    }
+
+    /** Hold a folder, then "change icon". */
+    fun menuFolderIcon() = afterMenu(160) { row ->
+        if (row.kids == null) return@afterMenu
+        openSearch()
+        pickFor = row
+    }
+
+    private fun saveFolderIcons(next: Map<String, String>) {
+        folderIcons = next
+        prefs.folderIcons = next
     }
 
     /** The keys of all apps in folders on the dial. */
@@ -2376,22 +2404,26 @@ class LauncherState(
 
     /** Back from the icons to the list of apps. */
     fun unpick() {
+        // A folder icon pick starts on the icons, so back leaves the sheet.
+        if (pickFor?.kids != null) return closeSearch()
         fb.tap()
         pickFor = null
     }
 
     /** The icon that the picker marks for [app]: the icon of its quick button, or else the icon that fits. Null marks the name. */
     fun iconFor(app: AppEntry): String? {
+        if (app.kids != null) return rowIcon(app)
         val q = quick.firstOrNull { it.key == app.key }
         return if (q != null) q.icon else QuickIcons.suggest(app.label, app.component.packageName)
     }
 
     /** True when [app] is the only quick app after the pick. Only then does a button show the full name. */
-    fun soloPick(app: AppEntry) = quick.put(pickSlot, app.key, null).size == 1
+    fun soloPick(app: AppEntry) = app.kids != null || quick.put(pickSlot, app.key, null).size == 1
 
     /** Puts the picked app on the quick button with [icon], or with its name when [icon] is null. */
     fun setQuick(icon: String?) {
         val app = pickFor ?: return
+        if (app.kids != null) return setFolderIcon(app, icon)
         val before = quick
         val next = quick.put(pickSlot, app.key, icon)
         fb.double()
@@ -2402,6 +2434,18 @@ class LauncherState(
             val text = if (before.any { it.key == app.key }) "changed the quick button" else "${app.display} is a quick app"
             showToast(text) { saveQuick(before) }
         }
+    }
+
+    /** Gives the folder [row] the icon [icon], or no icon when [icon] is null. */
+    private fun setFolderIcon(row: AppEntry, icon: String?) {
+        val id = row.key.removePrefix(FOLDER)
+        val before = folderIcons
+        fb.double()
+        fb.click(false)
+        saveFolderIcons(folderIcons + (id to (icon ?: NO_ICON)))
+        search = false
+        pickFor = null
+        if (folderIcons != before) showToast("changed the icon of ${row.display}") { saveFolderIcons(before) }
     }
 
     private fun saveQuick(next: List<QuickSlot>) {
