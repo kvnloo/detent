@@ -2,6 +2,7 @@ package app.detent.launcher.ui
 
 import app.detent.launcher.GlassFx
 import app.detent.launcher.Glass
+import app.detent.launcher.GlassLook
 import kotlin.math.exp
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Path
@@ -48,8 +49,9 @@ import kotlin.math.sin
 fun DialCanvas(s: LauncherState, pal: Palette, wave: VoiceWave) {
     val u = LocalUnits.current
     val measurer = rememberTextMeasurer(cacheSize = 160)
-    val regular = remember(u) { textStyle(u, 15f, pal.fg, FontWeight.Normal, spacing = .01f) }
-    val medium = remember(u) { textStyle(u, 15f, pal.fg, FontWeight.Medium, spacing = .01f) }
+    val halo = LocalHalo.current
+    val regular = remember(u, halo) { textStyle(u, 15f, pal.fg, FontWeight.Normal, spacing = .01f, halo = halo) }
+    val medium = remember(u, halo) { textStyle(u, 15f, pal.fg, FontWeight.Medium, spacing = .01f, halo = halo) }
 
     val scrub = s.scrub
     val themeStep = s.ob == Step.THEME
@@ -66,22 +68,22 @@ fun DialCanvas(s: LauncherState, pal: Palette, wave: VoiceWave) {
 
     val fx = remember { GlassFx() }
     // The bezel dial is always glass; the others get a glass band when glass is on.
-    val glass = if (layout.markers == Markers.Bezel && !s.glass.on) Glass.Clear else s.glass
+    val look = s.lookNow ?: if (layout.markers == Markers.Bezel) Glass.Clear.look else null
 
     Canvas(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
         val g = Geo(s.radius, u.cy)
-        if (glass.on) drawGlassBand(fx, g, u.k, pal, layout.markers, left, glass)
+        if (look != null) drawGlassBand(fx, g, u.k, pal, layout.markers, left, look)
         drawMarks(s.pos, g, u.k, pal, layout, left, wave)
         drawLabels(s.pos, g, u.k, pal, layout, left, names, dots, hide, scrub != null, measurer, regular, medium)
-        drawNotch(s.pawl, g, u.k, pal, layout.notch, left, fx, glass)
+        drawNotch(s.pawl, g, u.k, pal, layout.notch, left, fx, look ?: Glass.Clear.look!!)
     }
 }
 
 /** A band of lit glass under the marks. The bezel dial gets a wide band; the others a slim one. */
-private fun DrawScope.drawGlassBand(fx: GlassFx, g: Geo, k: Float, pal: Palette, m: Markers, left: Boolean, glass: Glass) {
+private fun DrawScope.drawGlassBand(fx: GlassFx, g: Geo, k: Float, pal: Palette, m: Markers, left: Boolean, glass: GlassLook) {
     val cx = (if (left) W - g.cx else g.cx) * k
     val (inner, outer) = if (m == Markers.Bezel) 26f to 4f else 14f to 8f
-    val tint = pal.bg.copy(alpha = .22f + glass.tintA * .5f)
+    val tint = glass.tintColor(pal)
     with(fx) { band(cx, g.cy * k, (g.r - inner) * k, (g.r + outer) * k, tint, glass, k) }
 }
 
@@ -244,7 +246,7 @@ private fun DrawScope.drawLabels(
 }
 
 /** The fixed notch at the selected row. It kicks 4 units outward on every detent. */
-private fun DrawScope.drawNotch(pawl: Float, g: Geo, k: Float, pal: Palette, m: Markers, left: Boolean, fx: GlassFx, glass: Glass) {
+private fun DrawScope.drawNotch(pawl: Float, g: Geo, k: Float, pal: Palette, m: Markers, left: Boolean, fx: GlassFx, glass: GlassLook) {
     val off = (if (left) 1f else -1f) * pawl * 4f
     fun x(v: Float) = ((if (left) W - v else v) + off) * k
     val cy = g.cy * k
@@ -263,7 +265,7 @@ private fun DrawScope.drawNotch(pawl: Float, g: Geo, k: Float, pal: Palette, m: 
         }
         Markers.Bezel -> {
             val c = Offset(x(226f), cy)
-            with(fx) { bead(c.x, c.y, 10f * k, pal.bg.copy(alpha = .3f + glass.tintA * .4f), glass, k) }
+            with(fx) { bead(c.x, c.y, 10f * k, glass.tintColor(pal), glass, k) }
             drawCircle(pal.accent, 3.5f * k, c)
         }
         Markers.Comet -> {

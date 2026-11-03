@@ -155,7 +155,11 @@ fun DetentRoot(s: LauncherState) {
                 s.clockTop = u.clockTop
                 s.buttonY = u.buttonY
             }
-            CompositionLocalProvider(LocalUnits provides u) { Home(s) }
+            // Text over a live wallpaper gets a soft shadow in the theme's background colour.
+            val halo = if (s.seeThrough) PALETTES[s.cfg.theme].bg.copy(alpha = .7f) else null
+            val hold = remember { HoldHost(s.haptic) }
+            hold.screenW = constraints.maxWidth.toFloat()
+            CompositionLocalProvider(LocalUnits provides u, LocalHalo provides halo, LocalHold provides hold) { Home(s) }
         }
     }
 }
@@ -207,7 +211,10 @@ private fun Home(s: LauncherState) {
         AppsHint(s, pal)
         CornerButtons(s, pal)
         HearLayer(s, pal)
-        if (s.ob != null) Onboarding(s, pal, THEMES[live])
+        if (s.ob != null) {
+            Onboarding(s, pal, THEMES[live])
+            HoldCards(pal)
+        }
         QuickMenuView(s, pal)
         SearchSheet(s, pal)
         StatusStrip(s, pal, status)
@@ -260,7 +267,7 @@ private fun rememberAsset(path: String): Pair<String, ImageBitmap>? {
 /** The shade over a see-through theme: the glass tint, or the grid's own shade scaled by its visibility. */
 private fun seeThroughShade(s: LauncherState): Float {
     val grid = s.layout.grid
-    val base = if (s.glass.on) s.glass.tintA else if (grid) .45f else 0f
+    val base = s.lookNow?.veil ?: if (grid) .45f else 0f
     return if (grid) base * (.35f + .65f * s.gridVis) else base
 }
 

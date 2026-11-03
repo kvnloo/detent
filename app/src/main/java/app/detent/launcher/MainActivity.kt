@@ -129,10 +129,10 @@ class MainActivity : ComponentActivity(), Host {
     override fun openAssistant(pkg: String): Boolean =
         open(Intent(Intent.ACTION_ASSIST).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 
-    override fun setGlassBlur(glass: Glass) {
+    override fun setGlassBlur(look: GlassLook?) {
         if (Build.VERSION.SDK_INT < 31) return
-        val on = glass.on && windowManager.isCrossWindowBlurEnabled
-        window.setBackgroundBlurRadius(if (on) glass.blurPx(screenSize().first) else 0)
+        val on = look != null && windowManager.isCrossWindowBlurEnabled
+        window.setBackgroundBlurRadius(if (on) look!!.blurPx(screenSize().first) else 0)
     }
 
     override fun openLiveWallpaper(theme: ThemeDef): Boolean {

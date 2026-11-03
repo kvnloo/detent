@@ -51,23 +51,100 @@ class Feedback(private val ctx: Context) {
         if (id != 0) pool.play(id, 1f, 1f, 1, 0, 0.9f + Random.nextFloat() * 0.2f)
     }
 
-    /** One app passes the notch. */
-    fun tick() = predefined(VibrationEffect.EFFECT_TICK)
+    /**
+     * Haptic language. Built from the primitives the phone reports (S25 Ultra: CLICK, TICK, LOW_TICK, THUD,
+     * SPIN, QUICK_RISE, SLOW_RISE, QUICK_FALL, scaled, up to 10 per composition). Each has a fallback to the
+     * predefined effects for phones without primitive support.
+     *
+     * The grammar: rising primitives anticipate (keep holding), a sharp CLICK confirms, LOW_TICK is texture
+     * that never asks for attention, falling primitives let go (cancel), and repeated stutters refuse.
+     */
 
-    /** A button press. */
-    fun tap() = predefined(VibrationEffect.EFFECT_TICK)
+    /** One app passes the notch. Fast spins get lighter ticks, so a flick feels like a freewheel. */
+    fun tick(speed: Float = 0f) {
+        val s = (1f - (speed - 6f) / 30f).coerceIn(.35f, 1f)
+        compose(VibrationEffect.EFFECT_TICK, P(PRIM_TICK, .85f * s))
+    }
+
+    /** A button press: the finger lands on a control. */
+    fun tap() = compose(VibrationEffect.EFFECT_TICK, P(PRIM_LOW_TICK, .9f))
+
+    /** A toggle turns on: a crisp click. */
+    fun on() = compose(VibrationEffect.EFFECT_CLICK, P(PRIM_CLICK, .9f))
+
+    /** A toggle turns off: lighter and lower than [on], so the two feel different without looking. */
+    fun off() = compose(VibrationEffect.EFFECT_TICK, P(PRIM_LOW_TICK, 1f), P(PRIM_TICK, .25f, 45))
+
+    /** A hold has begun: a slow swell that tells the finger to stay. Cut short by [settle] or [letGo]. */
+    fun charge() = compose(null, P(PRIM_SLOW_RISE, .32f))
+
+    /** The hold reached its threshold and a picker opened: a pop. */
+    fun pop() = compose(VibrationEffect.EFFECT_HEAVY_CLICK, P(PRIM_QUICK_RISE, .45f), P(PRIM_CLICK, 1f, 10))
+
+    /** The finger moves onto another option. */
+    fun hover() = compose(VibrationEffect.EFFECT_TICK, P(PRIM_TICK, .7f))
+
+    /** A slider snaps to a stop. */
+    fun detent() = compose(VibrationEffect.EFFECT_CLICK, P(PRIM_CLICK, .7f))
+
+    /** Fine texture while a slider moves between stops. Rate limited. */
+    fun texture() {
+        val t = android.os.SystemClock.uptimeMillis()
+        if (t - lastTexture < 22) return
+        lastTexture = t
+        compose(null, P(PRIM_LOW_TICK, .22f))
+    }
+
+    /** A slider hits its end. */
+    fun edge() = compose(VibrationEffect.EFFECT_HEAVY_CLICK, P(PRIM_CLICK, 1f), P(PRIM_LOW_TICK, .7f, 28))
+
+    /** A choice is made: a firm click, then a soft settle as it seats. */
+    fun settle() = compose(VibrationEffect.EFFECT_CLICK, P(PRIM_CLICK, 1f), P(PRIM_LOW_TICK, .45f, 55))
+
+    /** A hold is released without a choice. */
+    fun letGo() = compose(VibrationEffect.EFFECT_TICK, P(PRIM_QUICK_FALL, .45f))
 
     /** One letter passes the notch. */
-    fun letter() = predefined(VibrationEffect.EFFECT_CLICK)
+    fun letter() = compose(VibrationEffect.EFFECT_CLICK, P(PRIM_CLICK, .8f))
 
-    /** A long press or an app open. */
-    fun heavy() = predefined(VibrationEffect.EFFECT_HEAVY_CLICK)
+    /** A long press or an app open: a short run-up into a full click. */
+    fun heavy() = compose(VibrationEffect.EFFECT_HEAVY_CLICK, P(PRIM_QUICK_RISE, .3f), P(PRIM_CLICK, 1f, 5))
 
     /** An app goes on or off the dial. */
-    fun double() = predefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
+    fun double() = compose(VibrationEffect.EFFECT_DOUBLE_CLICK, P(PRIM_CLICK, .75f), P(PRIM_CLICK, .75f, 70))
 
-    /** The action is not allowed. */
-    fun refuse() = vibrate(VibrationEffect.createWaveform(longArrayOf(0, 10, 60, 10), -1))
+    /** The action is not allowed: a three-beat stutter. */
+    fun refuse() = compose(
+        VibrationEffect.EFFECT_DOUBLE_CLICK,
+        P(PRIM_LOW_TICK, 1f), P(PRIM_LOW_TICK, 1f, 60), P(PRIM_LOW_TICK, 1f, 60),
+    )
+
+    private class P(val id: Int, val scale: Float, val delay: Int = 0)
+
+    @Volatile private var lastTexture = 0L
+
+    private val primitives: Boolean by lazy {
+        val v = vibrator
+        Build.VERSION.SDK_INT >= 30 && v != null && v.areAllPrimitivesSupported(
+            PRIM_CLICK, PRIM_TICK, PRIM_LOW_TICK, PRIM_QUICK_RISE, PRIM_SLOW_RISE, PRIM_QUICK_FALL,
+        )
+    }
+
+    /** Plays [parts] as one composition, or [fallback] (a predefined effect id; null = nothing) without primitives. */
+    private fun compose(fallback: Int?, vararg parts: P) {
+        if (primitives && Build.VERSION.SDK_INT >= 30) {
+            val c = VibrationEffect.startComposition()
+            for (p in parts) c.addPrimitive(p.id, p.scale.coerceIn(0f, 1f), p.delay)
+            vibrate(c.compose())
+        } else if (fallback != null) {
+            predefined(fallback)
+        }
+    }
+
+    /** Stops a [charge] that will not complete. */
+    fun cancel() {
+        if (haptics) vibrator?.cancel()
+    }
 
     fun release() = pool.release()
 
@@ -136,5 +213,11 @@ class Feedback(private val ctx: Context) {
 
     private companion object {
         const val RATE = 44100
+        const val PRIM_CLICK = VibrationEffect.Composition.PRIMITIVE_CLICK
+        const val PRIM_TICK = VibrationEffect.Composition.PRIMITIVE_TICK
+        const val PRIM_LOW_TICK = VibrationEffect.Composition.PRIMITIVE_LOW_TICK
+        const val PRIM_QUICK_RISE = VibrationEffect.Composition.PRIMITIVE_QUICK_RISE
+        const val PRIM_SLOW_RISE = VibrationEffect.Composition.PRIMITIVE_SLOW_RISE
+        const val PRIM_QUICK_FALL = VibrationEffect.Composition.PRIMITIVE_QUICK_FALL
     }
 }

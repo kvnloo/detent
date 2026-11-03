@@ -116,6 +116,11 @@ class Prefs(ctx: Context) {
         get() = sp.getString("customLayout", null)
         set(v) = sp.edit { putString("customLayout", v) }
 
+    /** The glass values, see [GlassLook.encode]. */
+    var glassLook: String?
+        get() = sp.getString("glassLook", null)
+        set(v) = sp.edit { putString("glassLook", v) }
+
     /** The liquid glass preset, by [Glass] name. */
     var glass: String
         get() = sp.getString("glass", "Off") ?: "Off"

@@ -87,8 +87,8 @@ interface Host {
     /** Opens an assistant app's own voice entry. False when it can't be opened. */
     fun openAssistant(pkg: String): Boolean
 
-    /** Blurs what is behind the window (a live wallpaper), or stops blurring when [glass] is off. */
-    fun setGlassBlur(glass: Glass)
+    /** Blurs what is behind the window (a live wallpaper) as [look] says, or stops blurring when null. */
+    fun setGlassBlur(look: GlassLook?)
 
     /** Hands a live wallpaper package to its wallpaper app, which asks to apply it. */
     fun openLiveWallpaper(theme: ThemeDef): Boolean
@@ -211,6 +211,7 @@ class LauncherState(
     private var vel = 0f
     private var target = 0f
     private var lastIdx = 0
+    private var lastDetent = 0L
     private var lastClick = 0L
     private var rTarget = 330f
     private var loop: Job? = null
@@ -310,6 +311,17 @@ class LauncherState(
     var glass by mutableStateOf(Glass.of(prefs.glass))
         private set
 
+    /** The glass values; a preset fills them, the sliders change them. */
+    var look by mutableStateOf(GlassLook.decode(prefs.glassLook) ?: Glass.of(prefs.glass).look ?: Glass.Clear.look!!)
+        private set
+
+    /** The look in use, or null when glass is off. */
+    val lookNow: GlassLook? get() = if (glass.on) look else null
+
+    /** True while the glass panel is open on the feel step. */
+    var glassOpen by mutableStateOf(false)
+        private set
+
     /** True when the theme lets the system wallpaper through, so glass has something to frost. */
     val seeThrough get() = Synced.isSystemWall(THEMES[cfg.theme]) && (customWall == null || layout.grid)
 
@@ -336,9 +348,9 @@ class LauncherState(
         private set
 
     fun toggleTapOpens() {
-        tap()
         tapOpens = !tapOpens
         prefs.tapOpens = tapOpens
+        toggled(tapOpens)
     }
 
     /**
@@ -367,6 +379,14 @@ class LauncherState(
         val all = listOf<String?>(null) + host.assistants().map { it.first }
         micApp = all[(all.indexOf(micApp) + 1).mod(all.size)]
         prefs.micApp = micApp
+    }
+
+    /** Every choice for the voice button: Detent's own listening (null), then each assistant app. */
+    fun micChoices(): List<Pair<String?, String>> = listOf<Pair<String?, String>>(null to "detent") + host.assistants()
+
+    fun setMic(pkg: String?) {
+        micApp = pkg
+        prefs.micApp = pkg
     }
 
     fun micLabel(): String = micApp?.let { p -> host.assistants().firstOrNull { it.first == p }?.second ?: p } ?: "detent"
@@ -586,7 +606,10 @@ class LauncherState(
                 lastClick = t
                 val letters = scrub != null
                 fb.click(letters)
-                if (letters) fb.letter() else fb.tick()
+                // Rows per second since the last detent: a flick freewheels, a slow turn clicks firmly.
+                val speed = 1000f / max(1L, t - lastDetent).toFloat()
+                lastDetent = t
+                if (letters) fb.letter() else fb.tick(speed)
             }
             followReadout()
         }
@@ -1079,29 +1102,69 @@ class LauncherState(
     }
 
     fun toggleLockWall() {
-        tap()
         lockWall = !lockWall
         prefs.lockWall = lockWall
         if (!lockWall) prefs.appliedWall = null
+        toggled(lockWall)
     }
 
     fun cycleGrid() {
         tap()
-        val steps = floatArrayOf(1f, .7f, .45f, .25f, 0f)
+        val steps = floatArrayOf(1f, .8f, .6f, .4f, .2f, 0f)
         val i = steps.indexOfFirst { kotlin.math.abs(it - gridVis) < .01f }
         gridVis = steps[(i + 1) % steps.size]
         prefs.gridVis = gridVis
     }
 
-    fun cycleGlass() {
+    fun toggleGlassPanel() {
         tap()
-        glass = glass.next()
-        prefs.glass = glass.name
+        glassOpen = !glassOpen
+    }
+
+    /** Picks a starting look. The haptics come from the control that picked it. */
+    fun setGlass(g: Glass) {
+        glass = g
+        g.look?.let { look = it }
+        prefs.glass = g.name
+        prefs.glassLook = look.encode()
         syncGlass()
     }
 
+    /** Moves the glass values. Live while a slider moves; [commit] saves them. */
+    fun setLook(l: GlassLook, commit: Boolean) {
+        look = l
+        glass = Glass.PRESETS.firstOrNull { it.look == l } ?: Glass.Custom
+        syncGlass()
+        if (commit) {
+            prefs.glass = glass.name
+            prefs.glassLook = l.encode()
+        }
+    }
+
+    fun setGrid(v: Float, commit: Boolean) {
+        gridVis = v
+        if (commit) prefs.gridVis = v
+    }
+
+    /** Shows layout [i] while a finger scrubs the layout row, without the tap feedback. */
+    fun previewLayout(i: Int) {
+        if (i !in LAYOUTS.indices || cfg.layout == i) return
+        cfg = cfg.copy(layout = i)
+        showClock(instant = true)
+        syncRadius()
+    }
+
     /** Blurs behind the window only when the theme shows the system wallpaper. */
-    fun syncGlass() = host.setGlassBlur(if (seeThrough) glass else Glass.Off)
+    fun syncGlass() = host.setGlassBlur(if (seeThrough) lookNow else null)
+
+    /** Haptics for a toggle: a crisp click when it turns on, a lighter fall when it turns off. */
+    private fun toggled(now: Boolean) {
+        fb.click(false)
+        if (now) fb.on() else fb.off()
+    }
+
+    /** The haptics engine, for controls that run their own gestures. */
+    val haptic: Feedback get() = fb
 
     fun setBar(own: Boolean) {
         tap()
@@ -1146,8 +1209,8 @@ class LauncherState(
     }
 
     /** Changes one part of the dial. The current dial becomes the starting point of the custom one. */
-    fun customize(radius: Float? = null, marks: Markers? = null, perApp: Int? = null, notch: Markers? = null) {
-        tap()
+    fun customize(radius: Float? = null, marks: Markers? = null, perApp: Int? = null, notch: Markers? = null, quiet: Boolean = false) {
+        if (!quiet) tap()
         val base = if (layout.grid) LAYOUTS[0] else layout
         val l = customLayout(radius ?: base.radius, marks ?: base.markers, perApp ?: base.ticksPerApp, notch ?: base.notch)
         LAYOUTS[CUSTOM] = l
@@ -1210,14 +1273,14 @@ class LauncherState(
         sound = !sound
         fb.sound = sound
         prefs.sound = sound
-        tap()
+        toggled(sound)
     }
 
     fun toggleHaptics() {
         haptics = !haptics
         fb.haptics = haptics
         prefs.haptics = haptics
-        tap()
+        toggled(haptics)
     }
 
     fun toggleDots() {
@@ -1233,15 +1296,15 @@ class LauncherState(
     }
 
     fun toggleVoice() {
-        tap()
         voice = !voice
         prefs.voice = voice
+        toggled(voice)
     }
 
     fun toggleWebSearch() {
-        tap()
         webSearch = !webSearch
         prefs.webSearch = webSearch
+        toggled(webSearch)
     }
 
     fun requestHome() {
