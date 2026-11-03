@@ -33,4 +33,37 @@ class QuickIconsTest {
         val labels = listOf("camera", "spotify", "maps", "chrome", "photos", "calendar", "termux", "weather", "steam", "drive")
         for (l in labels) assertTrue(l, QuickIcons.suggest(l, "") in QuickIcons.names)
     }
+
+    @Test fun folderEmojiGivesItsIcon() {
+        assertEquals("lock", QuickIcons.forFolder("🔒", emptyList()))
+        assertEquals("chat", QuickIcons.forFolder("💬 friends", emptyList()))
+    }
+
+    @Test fun folderNamesFindTheirIcon() {
+        assertEquals("code", QuickIcons.forFolder("code", emptyList()))
+        assertEquals("chat", QuickIcons.forFolder("talk", emptyList()))
+        assertEquals("globe", QuickIcons.forFolder("browse", emptyList()))
+        assertEquals("heart", QuickIcons.forFolder("care", emptyList()))
+        assertEquals("bolt", QuickIcons.forFolder("ai", emptyList()))
+        // A two-letter word must be the whole word: "ai" does not match "air".
+        assertEquals("star", QuickIcons.forFolder("air", emptyList()))
+    }
+
+    @Test fun folderOfUnknownNameTakesTheIconMostAppsShare() {
+        val kids = listOf("gmail" to "com.google.android.gm", "outlook" to "com.microsoft.office.outlook", "maps" to "x.maps")
+        assertEquals("mail", QuickIcons.forFolder("stuff", kids))
+        assertEquals("star", QuickIcons.forFolder("stuff", listOf("zzz" to "x.y")))
+    }
+
+    @Test fun onlyNamesWithoutLettersAreMarks() {
+        assertTrue(QuickIcons.markOnly("🔒"))
+        assertTrue(!QuickIcons.markOnly("🔒 keys"))
+        assertTrue(!QuickIcons.markOnly(""))
+    }
+
+    @Test fun everyFolderIconIsDrawn() {
+        val all = listOf("🔒", "code", "term", "talk", "browse", "read", "care", "ai", "money", "shop", "watch", "music", "mail",
+            "games", "travel", "notes", "tools", "photos", "cloud", "stuff")
+        all.forEach { assertTrue(it, QuickIcons.forFolder(it, emptyList()) in QuickIcons.names + "star") }
+    }
 }

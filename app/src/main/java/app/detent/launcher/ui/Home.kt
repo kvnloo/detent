@@ -884,6 +884,7 @@ private fun QuickMenuView(s: LauncherState, pal: Palette) {
             } else if (m.app.kids != null) {
                 MenuItem("move", pal.muted2) { s.menuMove() }
                 MenuItem("edit folder", pal.muted2) { s.menuFolder() }
+                MenuItem("change icon", pal.muted2) { s.menuFolderIcon() }
                 MenuItem("ungroup", pal.muted2) { s.menuUngroup() }
                 MenuItem("remove from dial", pal.muted2) { s.menuRemove() }
             } else {

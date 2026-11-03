@@ -154,6 +154,11 @@ class Prefs(ctx: Context) {
         get() = decodeFolders(sp.getString("folders", null))
         set(v) = sp.edit { putString("folders", encodeFolders(v)) }
 
+    /** The icon of each folder by folder id, see [encodePairs]. A missing folder picks its own icon. */
+    var folderIcons: Map<String, String>
+        get() = decodePairs(sp.getString("folderIcons", null))
+        set(v) = sp.edit { putString("folderIcons", encodePairs(v)) }
+
     /** What a swipe on a row opens, see [encodePairs]. */
     var swipes: Map<String, String>
         get() = decodePairs(sp.getString("swipes", null))
