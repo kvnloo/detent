@@ -43,6 +43,8 @@ class Layout(
     val markers: Markers,
     val ticksPerApp: Int,
     val kind: Kind = Kind.Radial,
+    /** The notch style. Presets use the style of their marks; a custom dial can mix them. */
+    val notch: Markers = markers,
 ) {
     val grid get() = kind != Kind.Radial
 
@@ -58,7 +60,7 @@ class Layout(
     fun cy(hd: Float) = if (grid) snap(476f + (hd - H0) / 2f) else CY0 + (hd - H0) / 2f
 }
 
-val LAYOUTS = listOf(
+val LAYOUTS: MutableList<Layout> = mutableListOf(
     Layout("soft · radial · double", 330f, Markers.Double, 4),
     Layout("round · radial · double", 200f, Markers.Double, 5),
     Layout("soft · radial · ticks", 330f, Markers.Ticks, 4),
@@ -72,7 +74,37 @@ val LAYOUTS = listOf(
     Layout("orbit · radial · comet", 300f, Markers.Comet, 3),
     Layout("watch · radial · spokes", 180f, Markers.Spokes, 10),
     Layout("liquid · radial · wave", 400f, Markers.Wave, 8),
+    // The user's own mix, always last. Prefs.customLayout replaces it at start.
+    customLayout(330f, Markers.Double, 4, Markers.Double),
 )
+
+/** Index of the custom dial in [LAYOUTS]. */
+val CUSTOM get() = LAYOUTS.lastIndex
+
+/** Rim radius per curve name, flattest first. */
+val CURVES = listOf("flat" to 560f, "wide" to 420f, "soft" to 330f, "round" to 220f, "tight" to 170f)
+val DENSITIES = listOf(1, 2, 3, 4, 6, 8, 10)
+
+fun curveName(r: Float) = CURVES.minBy { kotlin.math.abs(it.second - r) }.first
+
+fun customLayout(radius: Float, marks: Markers, perApp: Int, notch: Markers) = Layout(
+    "custom · ${curveName(radius)} · ${marks.name.lowercase()}" +
+        (if (notch != marks) " · ${notch.name.lowercase()} notch" else ""),
+    radius, marks, perApp, Kind.Radial, notch,
+)
+
+/** "radius|marks|perApp|notch", as saved in prefs. Returns null for anything that does not parse. */
+fun encodeLayout(l: Layout) = "${l.radius}|${l.markers.name}|${l.ticksPerApp}|${l.notch.name}"
+
+fun decodeLayout(s: String?): Layout? {
+    val p = s?.split('|') ?: return null
+    if (p.size != 4) return null
+    val r = p[0].toFloatOrNull()?.takeIf { it in 120f..800f } ?: return null
+    val m = Markers.entries.firstOrNull { it.name == p[1] } ?: return null
+    val t = p[2].toIntOrNull()?.takeIf { it in 1..12 } ?: return null
+    val n = Markers.entries.firstOrNull { it.name == p[3] } ?: return null
+    return customLayout(r, m, t, n)
+}
 
 // The grid layouts. Grid dots sit every G units, starting GO units from the top left corner.
 const val G = 12f

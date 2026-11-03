@@ -1,5 +1,11 @@
 package app.detent.launcher.ui
 
+import app.detent.launcher.curveName
+import app.detent.launcher.Markers
+import app.detent.launcher.DENSITIES
+import app.detent.launcher.CUSTOM
+import app.detent.launcher.CURVES
+import androidx.compose.foundation.horizontalScroll
 import kotlin.math.roundToInt
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -57,6 +63,7 @@ private fun copy(step: Int, custom: Boolean, grid: Boolean) = when (step) {
     else -> Copy("", "ready", "drag up from the bottom to search. hold the clock to change your setup. hold an app for shortcuts, or the dial to jump by letter.")
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
     val u = LocalUnits.current
@@ -78,7 +85,11 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
     }
 
     // The feel step has one more row of chips.
-    val controlsY = u.navY - if (step == Step.FEEL) 266f else 170f
+    val controlsY = u.navY - when {
+        step == Step.FEEL -> 266f
+        step == Step.SHAPE && s.customOpen -> 300f
+        else -> 170f
+    }
     Box(Modifier.fillMaxSize()) {
         if (step == Step.APPS) Box(Modifier.fillMaxSize().background(pal.veil))
         if (step == Step.SHAPE || step == Step.THEME || step == Step.FEEL) {
@@ -91,7 +102,16 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
         SideBox(s.left, 84f, 28f, enter) {
             Column(Modifier.width(u.dp(170f)), verticalArrangement = Arrangement.spacedBy(u.dp(14f))) {
                 val align = if (s.left) TextAlign.End else TextAlign.Start
-                Txt(c.counter, 11f, pal.muted, Modifier.fillMaxWidth().heightIn(min = u.dp(14f)), spacing = .08f, align = align)
+                if (s.obEdit && step in Step.SHAPE..Step.FEEL) {
+                    // Editing: the steps are tabs, so one change needs one screen.
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(u.dp(10f), if (s.left) Alignment.End else Alignment.Start)) {
+                        listOf("shape" to Step.SHAPE, "theme" to Step.THEME, "apps" to Step.APPS, "feel" to Step.FEEL).forEach { (name, n) ->
+                            Txt(name, 11f, if (n == step) pal.accent else pal.muted, Modifier.tap { s.jumpStep(n) }, spacing = .08f)
+                        }
+                    }
+                } else {
+                    Txt(c.counter, 11f, pal.muted, Modifier.fillMaxWidth().heightIn(min = u.dp(14f)), spacing = .08f, align = align)
+                }
                 Txt(c.title, 52f, pal.fg, Modifier.fillMaxWidth(), weight = FontWeight.Light, spacing = -.05f, line = 1f, align = align)
                 Txt(c.body, 13f, pal.muted2, Modifier.fillMaxWidth(), line = 1.6f, align = align)
             }
@@ -107,14 +127,19 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
             val gap = Arrangement.spacedBy(u.dp(8f))
             when (step) {
                 Step.SHAPE -> {
-                    Row(horizontalArrangement = Arrangement.spacedBy(u.dp(6f))) {
-                        LAYOUTS.indices.forEach { i ->
-                            Chip("${i + 1}", s.cfg.layout == i, pal, { s.setLayout(i) }, square = true, size = 38f)
+                    if (s.customOpen) {
+                        CustomRows(s, pal)
+                    } else {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(u.dp(6f)), verticalArrangement = Arrangement.spacedBy(u.dp(6f))) {
+                            LAYOUTS.indices.forEach { i ->
+                                Chip(if (i == CUSTOM) "+" else "${i + 1}", s.cfg.layout == i, pal, { s.setLayout(i) }, square = true, size = 34f)
+                            }
                         }
                     }
                     Row(horizontalArrangement = gap) {
-                        Chip("dial right", s.cfg.side == Side.Right, pal, { s.setSide(Side.Right) })
-                        Chip("dial left", s.cfg.side == Side.Left, pal, { s.setSide(Side.Left) })
+                        Chip("right", s.cfg.side == Side.Right, pal, { s.setSide(Side.Right) })
+                        Chip("left", s.cfg.side == Side.Left, pal, { s.setSide(Side.Left) })
+                        Chip("customize", s.customOpen, pal, { s.toggleCustomize() })
                     }
                 }
                 Step.THEME -> {
@@ -176,6 +201,35 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
     }
 }
 
+/** Mix and match: curve, marks, notch and density, each its own row. Any change makes the custom dial. */
+@Composable
+private fun CustomRows(s: LauncherState, pal: Palette) {
+    val u = LocalUnits.current
+    val l = s.layout
+    val radial = !l.grid
+    @Composable
+    fun row(label: String, content: @Composable () -> Unit) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(u.dp(6f))) {
+            Txt(label, 11f, pal.muted, Modifier.width(u.dp(54f)), spacing = .06f)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(u.dp(6f))) { content() }
+        }
+    }
+    row("curve") {
+        CURVES.forEach { (name, r) ->
+            Chip(name, radial && curveName(l.radius) == name, pal, { s.customize(radius = r) }, padding = 12f)
+        }
+    }
+    row("marks") {
+        Markers.entries.forEach { m -> Chip(m.name.lowercase(), radial && l.markers == m, pal, { s.customize(marks = m) }, padding = 12f) }
+    }
+    row("notch") {
+        Markers.entries.forEach { m -> Chip(m.name.lowercase(), radial && l.notch == m, pal, { s.customize(notch = m) }, padding = 12f) }
+    }
+    row("density") {
+        DENSITIES.forEach { d -> Chip("$d", radial && l.ticksPerApp == d, pal, { s.customize(perApp = d) }, square = true, size = 34f) }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AppChips(s: LauncherState, pal: Palette, enter: Modifier, bottom: Float) {
@@ -213,6 +267,7 @@ private fun Nav(s: LauncherState, pal: Palette, step: Int) {
     val next = when (step) {
         Step.WELCOME -> "begin"
         Step.FEEL -> if (s.obEdit) "done" else "next"
+        Step.SHAPE, Step.THEME, Step.APPS -> if (s.obEdit) "done" else "next"
         Step.READY -> "go home"
         else -> "next"
     }

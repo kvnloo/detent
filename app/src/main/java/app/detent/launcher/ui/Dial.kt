@@ -73,7 +73,7 @@ fun DialCanvas(s: LauncherState, pal: Palette, wave: VoiceWave) {
         if (glass.on) drawGlassBand(fx, g, u.k, pal, layout.markers, left, glass)
         drawMarks(s.pos, g, u.k, pal, layout, left, wave)
         drawLabels(s.pos, g, u.k, pal, layout, left, names, dots, hide, scrub != null, measurer, regular, medium)
-        drawNotch(s.pawl, g, u.k, pal, layout.markers, left, fx, glass)
+        drawNotch(s.pawl, g, u.k, pal, layout.notch, left, fx, glass)
     }
 }
 

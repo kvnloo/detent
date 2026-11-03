@@ -321,12 +321,19 @@ class LauncherState(
     private var unread by mutableStateOf<Map<String, Long>>(emptyMap())
     private var opened by mutableStateOf(prefs.opened())
 
-    val layout get() = LAYOUTS[cfg.layout]
+    /** Bumped when the custom dial changes in place, so readers of [layout] redraw. */
+    private var layoutRev by mutableIntStateOf(0)
+    val layout: Layout get() = layoutRev.let { LAYOUTS[cfg.layout] }
+
+    /** True while the customize panel is open on the shape step. */
+    var customOpen by mutableStateOf(false)
+        private set
     val kind get() = layout.kind
     val left get() = cfg.side == Side.Left
     val dialApps by derivedStateOf { repo.apps.filter { it.key in dialKeys } }
 
     init {
+        decodeLayout(prefs.customLayout)?.let { LAYOUTS[CUSTOM] = it }
         fb.sound = sound
         fb.haptics = haptics
         val saved = prefs.load()
@@ -1054,6 +1061,8 @@ class LauncherState(
         tap()
         when (val o = ob ?: return) {
             Step.FEEL -> goTo(if (obEdit) null else Step.READY)
+            // Editing: done from any step.
+            in Step.SHAPE..Step.APPS -> goTo(if (obEdit) null else o + 1)
             Step.READY -> goTo(null)
             else -> goTo(o + 1)
         }
@@ -1077,6 +1086,31 @@ class LauncherState(
         } else if (o > Step.SHAPE) {
             goTo(o - 1)
         }
+    }
+
+    fun toggleCustomize() {
+        tap()
+        customOpen = !customOpen
+    }
+
+    /** Changes one part of the dial. The current dial becomes the starting point of the custom one. */
+    fun customize(radius: Float? = null, marks: Markers? = null, perApp: Int? = null, notch: Markers? = null) {
+        tap()
+        val base = if (layout.grid) LAYOUTS[0] else layout
+        val l = customLayout(radius ?: base.radius, marks ?: base.markers, perApp ?: base.ticksPerApp, notch ?: base.notch)
+        LAYOUTS[CUSTOM] = l
+        prefs.customLayout = encodeLayout(l)
+        cfg = cfg.copy(layout = CUSTOM)
+        layoutRev++
+        showClock(instant = true)
+        syncRadius()
+    }
+
+    /** In edit mode the step names are tabs. */
+    fun jumpStep(n: Int) {
+        if (!obEdit || ob == n || n !in Step.SHAPE..Step.FEEL) return
+        tap()
+        goTo(n)
     }
 
     fun setLayout(i: Int) {

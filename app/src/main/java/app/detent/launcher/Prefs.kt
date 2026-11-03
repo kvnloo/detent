@@ -101,6 +101,11 @@ class Prefs(ctx: Context) {
         get() = sp.getFloat("gridVis", 1f)
         set(v) = sp.edit { putFloat("gridVis", v) }
 
+    /** The custom dial, see [encodeLayout]. */
+    var customLayout: String?
+        get() = sp.getString("customLayout", null)
+        set(v) = sp.edit { putString("customLayout", v) }
+
     /** The liquid glass preset, by [Glass] name. */
     var glass: String
         get() = sp.getString("glass", "Off") ?: "Off"
