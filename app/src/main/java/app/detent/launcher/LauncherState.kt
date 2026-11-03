@@ -81,6 +81,12 @@ class DialHint(val app: AppEntry, val add: Boolean, val count: Int)
 
 /** The calls that need the activity. */
 interface Host {
+    /** Apps that can act as an assistant (they take ACTION_ASSIST), as package to label. */
+    fun assistants(): List<Pair<String, String>>
+
+    /** Opens an assistant app's own voice entry. False when it can't be opened. */
+    fun openAssistant(pkg: String): Boolean
+
     /** Blurs what is behind the window (a live wallpaper), or stops blurring when [glass] is off. */
     fun setGlassBlur(glass: Glass)
 
@@ -324,6 +330,20 @@ class LauncherState(
     /** Bumped when the custom dial changes in place, so readers of [layout] redraw. */
     private var layoutRev by mutableIntStateOf(0)
     val layout: Layout get() = layoutRev.let { LAYOUTS[cfg.layout] }
+
+    /** The assistant the voice button opens, or null for Detent's own listening. */
+    var micApp by mutableStateOf(prefs.micApp)
+        private set
+
+    /** Steps the voice button through Detent's own listening and each assistant app. */
+    fun cycleMic() {
+        tap()
+        val all = listOf<String?>(null) + host.assistants().map { it.first }
+        micApp = all[(all.indexOf(micApp) + 1).mod(all.size)]
+        prefs.micApp = micApp
+    }
+
+    fun micLabel(): String = micApp?.let { p -> host.assistants().firstOrNull { it.first == p }?.second ?: p } ?: "detent"
 
     /** True while the customize panel is open on the shape step. */
     var customOpen by mutableStateOf(false)
@@ -1532,6 +1552,7 @@ class LauncherState(
         if (blocked()) return
         tap()
         voiceFrom = Pose(x - 6f, y, 0f, 13f / 44f, 0f)
+        micApp?.let { if (host.openAssistant(it)) return }
         when {
             !host.canHear() -> systemVoice()
             host.hasMic() -> startHearing()

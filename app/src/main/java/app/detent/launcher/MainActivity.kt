@@ -119,6 +119,16 @@ class MainActivity : ComponentActivity(), Host {
         if (home && alreadyHome) state.onHome()
     }
 
+    override fun assistants(): List<Pair<String, String>> = packageManager
+        .queryIntentActivities(Intent(Intent.ACTION_ASSIST), 0)
+        .map { it.activityInfo.packageName to it.loadLabel(packageManager).toString() }
+        .distinctBy { it.first }
+        .filter { it.first != packageName }
+        .sortedBy { it.second.lowercase() }
+
+    override fun openAssistant(pkg: String): Boolean =
+        open(Intent(Intent.ACTION_ASSIST).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+
     override fun setGlassBlur(glass: Glass) {
         if (Build.VERSION.SDK_INT < 31) return
         val on = glass.on && windowManager.isCrossWindowBlurEnabled

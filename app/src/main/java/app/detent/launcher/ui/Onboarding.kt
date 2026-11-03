@@ -173,6 +173,7 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
                     }
                     Row(horizontalArrangement = gap) {
                         Chip("voice", s.voice, pal, { s.toggleVoice() })
+                        if (s.voice) Chip("mic · ${s.micLabel()}", s.micApp != null, pal, { s.cycleMic() })
                         Chip("web search", s.webSearch, pal, { s.toggleWebSearch() })
                     }
                 }

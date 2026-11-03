@@ -101,6 +101,11 @@ class Prefs(ctx: Context) {
         get() = sp.getFloat("gridVis", 1f)
         set(v) = sp.edit { putFloat("gridVis", v) }
 
+    /** Package of the assistant that the voice button opens, or null for Detent's own listening. */
+    var micApp: String?
+        get() = sp.getString("micApp", null)
+        set(v) = sp.edit { putString("micApp", v) }
+
     /** The custom dial, see [encodeLayout]. */
     var customLayout: String?
         get() = sp.getString("customLayout", null)
