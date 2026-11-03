@@ -1,0 +1,85 @@
+name: Detent checks
+
+on:
+  pull_request:
+    branches: [main, preview, nightly]
+  push:
+    branches: [main, preview, nightly, 'ci/**', 'feat/**', 'fix/**', 'integration/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  apk:
+    name: APK and unit tests
+    runs-on: avrea-ubuntu-latest-4-vcpu
+    timeout-minutes: 20
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enforce channel routing
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/check-policy.py
+      - name: Pipeline contract tests
+        run: python3 -m unittest discover -s scripts/tests -v
+      - name: Verify and build immutable candidate APKs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: bash scripts/ci-build.sh
+      - name: Test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checks-reports-${{ env.SOURCE_SHA }}
+          path: |
+            app/build/test-results/
+            app/build/reports/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Candidate APKs and provenance (never signed with the phone key in PR CI)
+        uses: actions/upload-artifact@v4
+        with:
+          name: detent-candidate-${{ env.SOURCE_SHA }}
+          path: out/
+          retention-days: 14
+          if-no-files-found: error
+  integration:
+    name: Full integration
+    if: github.ref_name == 'nightly' || github.event.pull_request.base.ref == 'nightly'
+    uses: ./.github/workflows/integration.yml
+  checks:
+    name: checks
+    if: always()
+    needs: [apk, integration]
+    runs-on: avrea-ubuntu-latest-2-vcpu
+    timeout-minutes: 2
+    steps:
+      - name: Fail closed for every applicable lane
+        env:
+          APK: ${{ needs.apk.result }}
+          INTEGRATION: ${{ needs.integration.result }}
+          FULL: ${{ github.ref_name == 'nightly' || github.event.pull_request.base.ref == 'nightly' }}
+        run: |
+          test "$APK" = success
+          if [ "$FULL" = true ]; then test "$INTEGRATION" = success; else test "$INTEGRATION" = skipped; fi

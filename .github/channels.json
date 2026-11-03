@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "feature_target": "preview",
+  "phone_channel": "preview",
+  "integration_target": "nightly",
+  "stable_target": "main",
+  "packages": {"s22": "app.detent.launcher.lab", "s25": "app.detent.launcher.kvn"},
+  "required_checks": ["checks"],
+  "s25_requires_s22_receipt": true,
+  "automatic_phone_install": false
+}
