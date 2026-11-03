@@ -1,6 +1,9 @@
 # This fork (kvnloo/detent)
 
-`main` here is the Detent I run on my phone. It is upstream
+`preview` is the day-to-day phone channel; feature PRs target it. `nightly` runs the
+full integration matrix, and `main` is stable source promoted from qualified nightly.
+See [GitOps channels and S22 → S25 rollout](GITOPS.md) for artifact identity, gates and
+installation receipts. This fork is upstream
 [bjarneo/detent](https://github.com/bjarneo/detent) plus:
 
 | feature | where |
@@ -22,7 +25,7 @@ and adb. Build a **debug** build: the live-theme files are copied in with `run-a
 only works on debuggable apps.
 
 ```sh
-git clone https://github.com/kvnloo/detent.git && cd detent
+git clone --branch preview https://github.com/kvnloo/detent.git && cd detent
 ./gradlew :app:testDebugUnitTest :app:assembleDebug \
   -PdetentId=app.detent.launcher.fork -PdetentCode=$(git rev-list --count HEAD)
 adb install -r app/build/outputs/apk/debug/app-debug.apk
