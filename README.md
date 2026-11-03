@@ -81,7 +81,7 @@ On the grid layouts, an app opens with a ripple of dots from the notch.
 
 The dial can sit on the right or the left edge.
 
-Detent has 28 themes. The 4 phone themes are dusk, ember, signal, and paper. They use a tinted dot-hand art. The 23 Omarchy themes each bring their own wallpaper. The `hyprland` synced theme uses desktop colours and keeps the system wallpaper. On the theme step, the colours change on each click of the dial. The wallpaper loads when the dial stops.
+Detent has 28 themes. The 4 phone themes are dusk, ember, signal, and paper. They use a tinted dot-hand art. The 23 Omarchy themes each bring their own wallpaper. The `hyprland` synced theme uses desktop colours and keeps the system wallpaper. On the theme step, the colours change on each click of the dial. The wallpaper loads when the dial stops. Detent remembers your theme by name, so adding themes in an update does not change your choice.
 
 ### Synced theme (`hyprland`)
 
