@@ -1,6 +1,6 @@
-# This fork (kvnloo/detent, branch `phone-build`)
+# This fork (kvnloo/detent)
 
-`phone-build` is the exact Detent I run on my phone. It is upstream
+`main` here is the Detent I run on my phone. It is upstream
 [bjarneo/detent](https://github.com/bjarneo/detent) plus:
 
 | feature | where |
@@ -9,10 +9,11 @@
 | live themes: one theme per Wallpaper Engine wallpaper; picking it switches the wallpaper | `Synced.kt`, `MainActivity.openLiveWallpaper` |
 | tabbed setup (shape / theme / apps / feel), custom dial, glass presets, hold-to-pick controls, haptics | `ui/Hold.kt`, `Glass.kt`, `Feedback.kt` |
 | folders, sideways swipe to launch, dial reordering, auto density | `Groups.kt` (PR #4) |
+| themes remembered by name; settings export and import | `Prefs.kt`, `SettingsBackup.kt` (PRs #3, #2) |
 
 The full map for setting up the phone around it (adb, Hermes phone-harness, Wallpaper
 Engine, colour sync) is in my dotfiles:
-[`kvnloo/.files` docs/phone-setup](https://github.com/kvnloo/.files/blob/feat/phone-setup-map/docs/phone-setup/README.md).
+[`kvnloo/.files` docs/phone-setup](https://github.com/kvnloo/.files/blob/master/docs/phone-setup/README.md).
 
 ## Build and install your own copy
 
@@ -21,7 +22,7 @@ and adb. Build a **debug** build: the live-theme files are copied in with `run-a
 only works on debuggable apps.
 
 ```sh
-git clone -b phone-build https://github.com/kvnloo/detent.git && cd detent
+git clone https://github.com/kvnloo/detent.git && cd detent
 ./gradlew :app:testDebugUnitTest :app:assembleDebug \
   -PdetentId=app.detent.launcher.fork -PdetentCode=$(git rev-list --count HEAD)
 adb install -r app/build/outputs/apk/debug/app-debug.apk
