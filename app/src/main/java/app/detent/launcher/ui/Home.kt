@@ -215,6 +215,7 @@ private fun Home(s: LauncherState) {
             Onboarding(s, pal, THEMES[live])
             HoldCards(pal)
         }
+        ModePill(s, pal)
         QuickMenuView(s, pal)
         SearchSheet(s, pal)
         StatusStrip(s, pal, status)
@@ -662,6 +663,36 @@ private fun ScrubLetter(s: LauncherState, pal: Palette) {
     }
 }
 
+/** While a folder is open, or a row rides in the notch: what is going on, and a tap to end it. */
+@Composable
+private fun ModePill(s: LauncherState, pal: Palette) {
+    val u = LocalUnits.current
+    val f = s.openFolder
+    val carried = s.carry?.let { k -> s.dialApps.firstOrNull { it.key == k } }
+    val text = when {
+        carried != null -> "moving ${carried.display} · tap to drop"
+        f != null -> "‹  ${f.display} · ${f.count}"
+        else -> null
+    }
+    var last by remember { mutableStateOf("") }
+    if (text != null) last = text
+    val shown = text != null && s.ob == null && !s.search
+    val a by animateFloatAsState(if (shown) 1f else 0f, tween(220), label = "modePill")
+    if (a < .01f) return
+    val shape = RoundedCornerShape(50)
+    SideBox(s.left, s.clockTop + 150f, 24f) {
+        Box(
+            Modifier.graphicsLayer { alpha = a; translationY = (1 - a) * -6f * u.k }
+                .height(u.dp(40f)).clip(shape).background(pal.btnBg).border(u.dp(1f), pal.accent.copy(alpha = .5f), shape)
+                .tap(enabled = shown) { if (s.carry != null) s.dropCarry() else s.closeFolder() }
+                .padding(horizontal = u.dp(16f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Txt(last, 12f, pal.fg, maxLines = 1, spacing = .02f)
+        }
+    }
+}
+
 @Composable
 private fun PressRing(s: LauncherState, pal: Palette) {
     val u = LocalUnits.current
@@ -811,7 +842,20 @@ private fun QuickMenuView(s: LauncherState, pal: Palette) {
                 MenuItem("change app", pal.muted2) { s.menuQuickApp() }
                 if (s.quick.size < QUICK_MAX) MenuItem("add a quick app", pal.muted2) { s.menuQuickAdd() }
                 MenuItem("remove quick app", pal.muted2) { s.menuQuickRemove() }
+            } else if (s.folderKey != null) {
+                MenuItem("move", pal.muted2) { s.menuMove() }
+                MenuItem("app info", pal.muted2) { s.menuInfo() }
+                MenuItem("take out of folder", pal.muted2) { s.menuTakeOut() }
+            } else if (m.app.kids != null) {
+                MenuItem("move", pal.muted2) { s.menuMove() }
+                MenuItem("edit folder", pal.muted2) { s.menuFolder() }
+                MenuItem("ungroup", pal.muted2) { s.menuUngroup() }
+                MenuItem("remove from dial", pal.muted2) { s.menuRemove() }
             } else {
+                MenuItem("move", pal.muted2) { s.menuMove() }
+                MenuItem("make a folder", pal.muted2) { s.menuFolder() }
+                val sw = s.swipeTarget(m.app)
+                MenuItem(if (sw != null) "swipe opens ${sw.display}" else "set a swipe app", pal.muted2) { s.menuSwipe() }
                 MenuItem("app info", pal.muted2) { s.menuInfo() }
                 MenuItem("remove from dial", pal.muted2) { s.menuRemove() }
             }
@@ -824,7 +868,7 @@ private fun QuickMenuView(s: LauncherState, pal: Palette) {
         ) { body() }
     } else {
         // Below the selected app. Near the bottom, the menu moves up so that it stays on the screen.
-        SideBox(s.left, min(s.anchorY + 30f, u.hd - u.bottom - 330f), 24f) { body() }
+        SideBox(s.left, min(s.anchorY + 30f, u.hd - u.bottom - 470f), 24f) { body() }
     }
 }
 

@@ -111,6 +111,21 @@ class Prefs(ctx: Context) {
         get() = sp.getString("micApp", null)
         set(v) = sp.edit { putString("micApp", v) }
 
+    /** The dial rows in their order, by row key. Empty: by name. */
+    var order: List<String>
+        get() = sp.getString("order", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
+        set(v) = sp.edit { putString("order", v.joinToString("\n")) }
+
+    /** The folders, see [encodeFolders]. */
+    var folders: List<Folder>
+        get() = decodeFolders(sp.getString("folders", null))
+        set(v) = sp.edit { putString("folders", encodeFolders(v)) }
+
+    /** What a swipe on a row opens, see [encodePairs]. */
+    var swipes: Map<String, String>
+        get() = decodePairs(sp.getString("swipes", null))
+        set(v) = sp.edit { putString("swipes", encodePairs(v)) }
+
     /** The custom dial, see [encodeLayout]. */
     var customLayout: String?
         get() = sp.getString("customLayout", null)

@@ -343,7 +343,7 @@ private fun CustomRows(s: LauncherState, pal: Palette) {
     val marks = Markers.entries
     row("marks", marks.map { it.name.lowercase() }, marks.indexOf(l.markers)) { i, q -> s.customize(marks = marks[i], quiet = q) }
     row("notch", marks.map { it.name.lowercase() }, marks.indexOf(l.notch)) { i, q -> s.customize(notch = marks[i], quiet = q) }
-    row("density", DENSITIES.map { "$it" }, DENSITIES.indexOf(l.ticksPerApp)) { i, q -> s.customize(perApp = DENSITIES[i], quiet = q) }
+    row("density", DENSITIES.map { if (it == 0) "auto" else "$it" }, DENSITIES.indexOf(l.ticksPerApp)) { i, q -> s.customize(perApp = DENSITIES[i], quiet = q) }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

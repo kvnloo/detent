@@ -64,6 +64,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
 import app.detent.launcher.AppEntry
 import app.detent.launcher.Ease
+import app.detent.launcher.Gather
 import app.detent.launcher.LauncherState
 import app.detent.launcher.Palette
 import app.detent.launcher.QuickIcons
@@ -136,6 +137,8 @@ fun SearchSheet(s: LauncherState, pal: Palette) {
                             contentAlignment = Alignment.CenterStart,
                         ) {
                             val empty = when {
+                                s.gather == Gather.Folder -> "find apps"
+                                s.gather == Gather.Swipe -> "pick the swipe app"
                                 s.pick -> "pick a quick app"
                                 s.web -> "search the web"
                                 else -> "search apps"
@@ -149,8 +152,11 @@ fun SearchSheet(s: LauncherState, pal: Palette) {
                     Txt("cancel", 13f, pal.muted2)
                 }
             }
+            if (s.gather == Gather.Folder) FolderHead(s, pal)
             val n = s.dialApps.size
             val count = when {
+                s.gather == Gather.Folder -> "tap apps to put them in the folder · the first one opens on a tap"
+                s.gather == Gather.Swipe -> "a sideways swipe on ${s.gatherLabel} opens the app you tap"
                 s.web -> "your browser or search app shows the results"
                 q.isNotBlank() -> "${results.size} " + if (results.size == 1) "match" else "matches"
                 s.pick -> "tap an app for the quick button"
@@ -160,7 +166,12 @@ fun SearchSheet(s: LauncherState, pal: Palette) {
                 Modifier.fillMaxWidth().padding(start = u.dp(28f), top = u.dp(16f), end = u.dp(18f), bottom = u.dp(8f)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Txt(count, 11f, pal.muted, Modifier.weight(1f), spacing = .06f, maxLines = 1)
+                Txt(count, 11f, pal.muted, Modifier.weight(1f), spacing = .06f, maxLines = 2)
+                if (s.gather == Gather.Swipe && s.gatherSwipe != null) {
+                    Box(Modifier.height(u.dp(32f)).tap { s.setSwipe(null) }.padding(horizontal = u.dp(10f)), contentAlignment = Alignment.Center) {
+                        Txt("no swipe", 11f, pal.accent, spacing = .04f)
+                    }
+                }
             }
             if (s.web) {
                 if (q.isNotBlank()) WebRow(s, pal, q.trim())
@@ -170,7 +181,14 @@ fun SearchSheet(s: LauncherState, pal: Palette) {
                 Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(start = u.dp(12f), end = u.dp(12f), bottom = u.dp(48f)),
             ) {
-                if (q.isBlank() && recent.isNotEmpty()) {
+                val picked = if (s.gather == Gather.Folder) s.gatherKeys.mapNotNull { k -> s.repo.apps.firstOrNull { it.key == k } } else emptyList()
+                if (picked.isNotEmpty() && q.isBlank()) {
+                    item(key = "picked") { Section("in the folder", pal) }
+                    itemsIndexed(picked, key = { _, a -> "picked " + a.key }) { _, app ->
+                        ResultRow(s, pal, app, highlight = false)
+                    }
+                    item(key = "all") { Section("all apps", pal) }
+                } else if (q.isBlank() && recent.isNotEmpty() && s.gather == null) {
                     item(key = "recent") { Section("recent", pal, if (s.pick) null else "clear") { s.clearRecent() } }
                     itemsIndexed(recent, key = { _, a -> "recent " + a.key }) { _, app ->
                         ResultRow(s, pal, app, highlight = false, recent = true)
@@ -219,7 +237,7 @@ private fun Section(text: String, pal: Palette, action: String? = null, onAction
 private fun ResultRow(s: LauncherState, pal: Palette, app: AppEntry, highlight: Boolean, recent: Boolean = false) {
     val u = LocalUnits.current
     var centre by remember { mutableFloatStateOf(0f) }
-    val onDial = app.key in s.dialKeys
+    val place = s.placeOf(app.key)
     Row(
         Modifier.fillMaxWidth().height(u.dp(48f)).clip(RoundedCornerShape(u.dp(10f)))
             .background(if (highlight) pal.hover else Color.Transparent)
@@ -228,7 +246,7 @@ private fun ResultRow(s: LauncherState, pal: Palette, app: AppEntry, highlight: 
     ) {
         Row(
             Modifier.weight(1f).fillMaxHeight()
-                .tap { if (s.pick) s.pickQuick(app) else s.openFromSearch(app, centre / u.k) }
+                .tap { s.resultTap(app, centre / u.k) }
                 .padding(horizontal = u.dp(16f)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(u.dp(10f)),
@@ -236,14 +254,30 @@ private fun ResultRow(s: LauncherState, pal: Palette, app: AppEntry, highlight: 
             Txt(app.label, 16f, pal.fg, Modifier.weight(1f, fill = false), maxLines = 1)
             if (s.hasDot(app)) Box(Modifier.size(u.dp(5f)).clip(CircleShape).background(pal.accent))
         }
-        if (s.pick) {
+        if (s.gather == Gather.Folder) {
+            val i = s.gatherKeys.indexOf(app.key)
+            Box(
+                Modifier.size(u.dp(44f)).tap { s.resultTap(app, 0f) },
+                contentAlignment = Alignment.Center,
+            ) {
+                val shape = CircleShape
+                Box(
+                    Modifier.size(u.dp(22f)).clip(shape)
+                        .background(if (i >= 0) pal.accent else Color.Transparent)
+                        .border(u.dp(1f), if (i >= 0) pal.accent else pal.rim2, shape),
+                    contentAlignment = Alignment.Center,
+                ) { if (i >= 0) Txt("${i + 1}", 11f, pal.onAccent, weight = FontWeight.Medium) }
+            }
+        } else if (s.gather == Gather.Swipe) {
+            if (s.gatherSwipe?.key == app.key) Txt("swipe", 11f, pal.accent, Modifier.padding(horizontal = u.dp(16f)), spacing = .04f)
+        } else if (s.pick) {
             if (s.quick.any { it.key == app.key }) Txt("quick app", 11f, pal.muted, Modifier.padding(horizontal = u.dp(16f)), spacing = .04f)
         } else if (recent) {
             Box(Modifier.size(u.dp(44f)).tap { s.removeRecent(app) }, contentAlignment = Alignment.Center) {
                 Cross(pal.muted, u.dp(10f))
             }
-        } else if (onDial) {
-            Txt("on dial", 11f, pal.muted, Modifier.padding(horizontal = u.dp(16f)), spacing = .04f)
+        } else if (place != null) {
+            Txt(place, 11f, pal.muted, Modifier.padding(horizontal = u.dp(16f)), spacing = .04f, maxLines = 1)
         } else {
             Box(
                 Modifier.height(u.dp(44f)).tap { s.addToDial(app) }.padding(start = u.dp(4f), end = u.dp(8f)),
@@ -256,6 +290,46 @@ private fun ResultRow(s: LauncherState, pal: Palette, app: AppEntry, highlight: 
                 ) { Txt("+ dial", 11f, pal.fg, maxLines = 1) }
             }
         }
+    }
+}
+
+/** The folder sheet: the folder name and done. */
+@Composable
+private fun FolderHead(s: LauncherState, pal: Palette) {
+    val u = LocalUnits.current
+    Row(
+        Modifier.padding(start = u.dp(28f), top = u.dp(10f), end = u.dp(18f)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(u.dp(10f)),
+    ) {
+        Txt("name", 11f, pal.muted, spacing = .06f)
+        BasicTextField(
+            value = s.folderName,
+            onValueChange = { s.folderName = it.take(17) },
+            modifier = Modifier.weight(1f).height(u.dp(40f)),
+            singleLine = true,
+            textStyle = textStyle(u, 18f, pal.fg, FontWeight.Normal),
+            cursorBrush = SolidColor(pal.accent),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { s.saveFolder() }),
+            decorationBox = { inner ->
+                Box(
+                    Modifier.fillMaxSize().drawBehind {
+                        val y = size.height - u.k / 2
+                        drawLine(pal.rim2, Offset(0f, y), Offset(size.width, y), strokeWidth = u.k)
+                    },
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (s.folderName.isEmpty()) Txt("messaging, social…", 18f, pal.muted, maxLines = 1)
+                    inner()
+                }
+            },
+        )
+        val shape = RoundedCornerShape(50)
+        Box(
+            Modifier.height(u.dp(36f)).clip(shape).background(pal.accent).tap { s.saveFolder() }.padding(horizontal = u.dp(16f)),
+            contentAlignment = Alignment.Center,
+        ) { Txt("done", 12f, pal.onAccent, weight = FontWeight.Medium) }
     }
 }
 

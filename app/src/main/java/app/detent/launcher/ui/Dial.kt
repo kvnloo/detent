@@ -36,11 +36,10 @@ import app.detent.launcher.THEME_NAMES
 import app.detent.launcher.W
 import app.detent.launcher.labelScale
 import app.detent.launcher.labelPose
+import app.detent.launcher.marksFor
 import app.detent.launcher.mod
 import kotlin.math.abs
-import kotlin.math.ceil
 import kotlin.math.cos
-import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sin
@@ -58,6 +57,9 @@ fun DialCanvas(s: LauncherState, pal: Palette, wave: VoiceWave) {
     val apps = s.dialApps
     val names = scrub ?: if (themeStep) THEME_NAMES else remember(apps) { apps.map { it.display } }
     val dots = if (scrub == null && !themeStep) apps.map { s.hasDot(it) } else null
+    // Auto density gives each row one mark per app it holds.
+    val counts = if (scrub == null && !themeStep) remember(apps) { apps.map { it.count } } else emptyList()
+    val swipe = s.swipeRow?.let { r -> Swipe(mod(r, maxOf(1, names.size)), s.swipeDx, s.swipeArmed) }
     val o = s.open
     val hide = if (o != null && o.fromDial && dots != null) apps.indexOfFirst { it.key == o.key } else -1
     val layout = s.layout
@@ -73,11 +75,14 @@ fun DialCanvas(s: LauncherState, pal: Palette, wave: VoiceWave) {
     Canvas(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
         val g = Geo(s.radius, u.cy)
         if (look != null) drawGlassBand(fx, g, u.k, pal, layout.markers, left, look)
-        drawMarks(s.pos, g, u.k, pal, layout, left, wave)
-        drawLabels(s.pos, g, u.k, pal, layout, left, names, dots, hide, scrub != null, measurer, regular, medium)
+        drawMarks(s.pos, g, u.k, pal, layout, left, wave, counts)
+        drawLabels(s.pos, g, u.k, pal, layout, left, names, dots, hide, scrub != null, measurer, regular, medium, swipe)
         drawNotch(s.pawl, g, u.k, pal, layout.notch, left, fx, look ?: Glass.Clear.look!!)
     }
 }
+
+/** A sideways swipe on row [row], [dx] units so far. */
+private class Swipe(val row: Int, val dx: Float, val armed: Boolean)
 
 /** A band of lit glass under the marks. The bezel dial gets a wide band; the others a slim one. */
 private fun DrawScope.drawGlassBand(fx: GlassFx, g: Geo, k: Float, pal: Palette, m: Markers, left: Boolean, glass: GlassLook) {
@@ -87,7 +92,7 @@ private fun DrawScope.drawGlassBand(fx: GlassFx, g: Geo, k: Float, pal: Palette,
     with(fx) { band(cx, g.cy * k, (g.r - inner) * k, (g.r + outer) * k, tint, glass, k) }
 }
 
-private fun DrawScope.drawMarks(pos: Float, g: Geo, k: Float, pal: Palette, layout: Layout, left: Boolean, wave: VoiceWave) {
+private fun DrawScope.drawMarks(pos: Float, g: Geo, k: Float, pal: Palette, layout: Layout, left: Boolean, wave: VoiceWave, counts: List<Int>) {
     val m = layout.markers
     fun x(v: Float) = (if (left) W - v else v) * k
     if (m == Markers.Ticks || m == Markers.Nodes) {
@@ -98,17 +103,14 @@ private fun DrawScope.drawMarks(pos: Float, g: Geo, k: Float, pal: Palette, layo
         // A second ring outside the rim, clear of the names.
         drawCircle(pal.rim, (g.r + 9) * k, Offset(x(g.cx), g.cy * k), style = Stroke(.6f * k))
     }
-    val tpa = layout.ticksPerApp
-    val first = ceil((pos - g.span) * tpa).toInt()
-    val last = floor((pos + g.span) * tpa).toInt()
-    for (i in first..last) {
-        val d = i.toFloat() / tpa - pos
+    for (mk in marksFor(pos, g.span, layout.ticksPerApp, counts)) {
+        val d = mk.at - pos
         val a = abs(d)
         if (a > g.span) continue
         val ang = d * g.step
         val px = g.cx - g.r * cos(ang)
         val py = g.cy + g.r * sin(ang)
-        val major = mod(i, tpa) == 0
+        val major = mk.major
         val hot = major && a < .5f
         val fade = (1 - a / g.span).pow(.8f)
         // While Detent listens, the voice swells the marks. A strong swell takes the accent colour.
@@ -175,7 +177,7 @@ private fun DrawScope.drawMarks(pos: Float, g: Geo, k: Float, pal: Palette, layo
             Markers.Wave -> {
                 // The marks ride a wave that travels twice as fast as the dial, so turning makes it roll.
                 val amp = 7f * (.35f + .65f * exp(-a * .5f)) + v * 10f
-                val rr = g.r + amp * sin((i.toFloat() / tpa) * 1.9f + pos * 1.9f)
+                val rr = g.r + amp * sin(mk.at * 1.9f + pos * 1.9f)
                 val wx = g.cx - rr * cos(ang)
                 val wy = g.cy + rr * sin(ang)
                 val size = (if (hot) 8f else if (major) 4.5f else 2.2f) + v * 5f
@@ -212,6 +214,7 @@ private fun DrawScope.drawLabels(
     measurer: TextMeasurer,
     regular: TextStyle,
     medium: TextStyle,
+    swipe: Swipe?,
 ) {
     val n = names.size
     if (n == 0) return
@@ -229,14 +232,17 @@ private fun DrawScope.drawLabels(
         val op = if (i == hide) 0f else (1 - a / g.span).pow(1.35f)
         if (op < .004f) continue
         val text = measurer.measure(name, if (sel) medium else regular)
+        // The swiped name follows the finger a little, and lights up once the swipe counts.
+        val sw = if (swipe != null && swipe.row == i) swipe else null
+        val sx = sw?.let { (it.dx * .45f).coerceIn(-48f, 48f) } ?: 0f
         withTransform({
-            translate(p.x * k, p.y * k)
+            translate((p.x + sx) * k, p.y * k)
             rotate(Math.toDegrees(p.rot.toDouble()).toFloat(), Offset.Zero)
             scale(s, s, Offset.Zero)
         }) {
             drawText(
                 text,
-                color = if (sel) pal.accent else pal.fg,
+                color = if (sel || sw?.armed == true) pal.accent else pal.fg,
                 topLeft = Offset(p.tx * text.size.width, -text.size.height / 2f),
                 alpha = op,
             )

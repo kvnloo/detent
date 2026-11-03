@@ -147,12 +147,24 @@ interface Host {
 /** A drag from the top edge opens the notifications. A drag from the bottom edge opens search. */
 private enum class Edge { None, Top, Bottom }
 
+/** How far a sideways swipe on a row goes before it counts, in design units. */
+const val SWIPE = 44f
+
+/** What the search sheet gathers apps for: a folder, or the app that a swipe opens. */
+enum class Gather { Folder, Swipe }
+
 private class Drag(val x0: Float, val y0: Float, var y: Float, val t0: Long, val zone: Zone, val edge: Edge) {
     var moved = false
 
     /** True when this edge drag opened the notifications or search. */
     var pulled = false
     var scrub = false
+
+    /** The dial row under the touch at the start, for a sideways swipe. */
+    var row: Int? = null
+
+    /** True when the drag goes sideways on a row: a swipe, not a turn. */
+    var swipe = false
 
     /** True when the touch caught a turning dial. A tap then only stops the dial. */
     var caught = false
@@ -230,6 +242,37 @@ class LauncherState(
     var cfg by mutableStateOf(Cfg())
         private set
     var dialKeys by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** The order of the dial rows by row key, or empty for the order by name. */
+    var order by mutableStateOf(prefs.order)
+        private set
+
+    /** The folders. A folder is on the dial when its key is in [dialKeys]. */
+    var folders by mutableStateOf(prefs.folders)
+        private set
+
+    /** What a sideways swipe on a dial row opens: row key to app key. */
+    var swipes by mutableStateOf(prefs.swipes)
+        private set
+
+    /** The key of the open folder, or null while the dial shows its own rows. */
+    var folderKey by mutableStateOf<String?>(null)
+        private set
+    private var folderBase = 0
+
+    /** The row that the dial carries to a new place, or null. The carried row stays in the notch as the dial turns. */
+    var carry by mutableStateOf<String?>(null)
+        private set
+    private var carryBefore: List<String>? = null
+    private var carryIn: String? = null
+
+    /** The row of the sideways swipe in progress, how far it has come, and whether it has come far enough. */
+    var swipeRow by mutableStateOf<Int?>(null)
+        private set
+    var swipeDx by mutableFloatStateOf(0f)
+        private set
+    var swipeArmed by mutableStateOf(false)
         private set
 
     var ob by mutableStateOf<Int?>(null)
@@ -396,7 +439,39 @@ class LauncherState(
         private set
     val kind get() = layout.kind
     val left get() = cfg.side == Side.Left
-    val dialApps by derivedStateOf { repo.apps.filter { it.key in dialKeys } }
+    /** The rows of the dial: apps and folders, in the saved order. */
+    val rows by derivedStateOf { rowsFor(dialKeys) }
+
+    /** The open folder row, or null. */
+    val openFolder by derivedStateOf { folderKey?.let { k -> rows.firstOrNull { it.key == k } } }
+
+    /** The rows that the dial shows: the apps of the open folder, or else the dial rows. */
+    val dialApps by derivedStateOf { openFolder?.kids ?: rows }
+
+    private fun rowsFor(keys: Set<String>): List<AppEntry> {
+        val byKey = repo.apps.associateBy { it.key }
+        val fs = folders.associateBy { it.key }
+        val entries = keys.mapNotNull { k -> byKey[k] ?: fs[k]?.let { folderEntry(it, byKey) } }
+            .sortedWith(compareBy({ it.label }, { it.key }))
+        val at = entries.associateBy { it.key }
+        return ordered(entries.map { it.key }, order).map { at.getValue(it) }
+    }
+
+    private fun folderEntry(f: Folder, byKey: Map<String, AppEntry>): AppEntry? {
+        val kids = f.keys.mapNotNull { byKey[it] }
+        val cover = kids.firstOrNull() ?: return null
+        return AppEntry(f.key, f.name.lowercase(), cover.component, cover.user, f.key, kids)
+    }
+
+    /** The keys of all apps in folders on the dial. */
+    private fun folderApps(): Set<String> =
+        folders.filter { it.key in dialKeys }.flatMapTo(HashSet()) { it.keys }
+
+    /** Where search shows an app: "on dial", "in <folder>", or null. */
+    fun placeOf(key: String): String? {
+        if (key in dialKeys) return "on dial"
+        return folders.firstOrNull { it.key in dialKeys && key in it.keys }?.let { "in " + it.name.lowercase() }
+    }
 
     init {
         decodeLayout(prefs.customLayout)?.let { LAYOUTS[CUSTOM] = it }
@@ -424,8 +499,8 @@ class LauncherState(
         }
     }
 
-    fun hasDot(app: AppEntry) =
-        dots && notifAccess && (unread[app.pkgUser] ?: 0L) > (opened[app.pkgUser] ?: 0L)
+    fun hasDot(app: AppEntry): Boolean =
+        app.kids?.any { hasDot(it) } ?: (dots && notifAccess && (unread[app.pkgUser] ?: 0L) > (opened[app.pkgUser] ?: 0L))
 
     fun curApp(): AppEntry? {
         val a = dialApps
@@ -443,7 +518,8 @@ class LauncherState(
             return
         }
         val installed = apps.mapTo(HashSet()) { it.key }
-        val kept = dialKeys.filterTo(HashSet()) { it in installed }
+        val live = folders.filter { f -> f.keys.any { it in installed } }.mapTo(HashSet()) { it.key }
+        val kept = dialKeys.filterTo(HashSet()) { it in installed || it in live }
         if (kept.isEmpty()) {
             dialKeys = repo.defaults()
             persist()
@@ -499,13 +575,19 @@ class LauncherState(
             endScrub()
         }
         drag = null
+        clearSwipe()
         if (menu != null) closeMenu()
+        dropCarry()
+        // An app opened from a folder: home shows the dial again.
+        closeFolder(quiet = true)
         // The microphone stays on only while Detent is in front.
         if (hear != null) closeVoice()
     }
 
     /** The home button while the launcher is already in front. */
     fun onHome() {
+        dropCarry()
+        closeFolder()
         if (menu != null) closeMenu()
         if (search) closeSearch()
         if (hear != null) closeVoice()
@@ -518,6 +600,8 @@ class LauncherState(
             menu != null -> closeMenu()
             pickFor != null -> unpick()
             search -> closeSearch()
+            carry != null -> dropCarry()
+            folderKey != null -> closeFolder()
             ob in Step.SHAPE..Step.FEEL -> obBack()
         }
     }
@@ -600,6 +684,7 @@ class LauncherState(
         if (idx != lastIdx) {
             lastIdx = idx
             pawl = 1f
+            if (carry != null) carryStep()
             val t = SystemClock.uptimeMillis()
             // The open sound covers the turn that a tap starts.
             if (open == null && t - lastClick > 26) {
@@ -618,7 +703,7 @@ class LauncherState(
         val done = spin == Spin.Idle && pawl < 0.01f && !morph && ls == lsT && !reading
         if (done) {
             pawl = 0f
-            if (ob == null && scrub == null) prefs.savePos(index)
+            if (ob == null && scrub == null && folderKey == null) prefs.savePos(index)
             if (readName && drag == null && open == null && hear == null) scheduleClock()
         }
         return !done
@@ -783,7 +868,7 @@ class LauncherState(
         if (blocked()) return
         val zone = if (ob == null) zoneAt(x, y) else Zone.None
         val edge = when {
-            ob != null -> Edge.None
+            ob != null || carry != null -> Edge.None
             y < pullY -> Edge.Top
             y > pushY -> Edge.Bottom
             else -> Edge.None
@@ -792,6 +877,7 @@ class LauncherState(
         val d = Drag(x, y, y, t, zone, edge)
         d.caught = spin == Spin.Fling || spin == Spin.Wheel || (spin == Spin.Settle && abs(target - pos) > .3f)
         d.samples.addLast(t to pos)
+        if (ob == null && edge == Edge.None && carry == null) d.row = swipeRowAt(x, y, zone)
         drag = d
         spin = Spin.Drag
         vel = 0f
@@ -817,6 +903,21 @@ class LauncherState(
         if (!d.moved && (abs(y - d.y0) > 6 || abs(x - d.x0) > 6)) {
             d.moved = true
             cancelPress()
+            // Sideways on a row is a swipe. The dial stays where it is.
+            if (d.row != null && !d.scrub && abs(x - d.x0) > abs(y - d.y0) * 1.3f) {
+                d.swipe = true
+                swipeRow = d.row
+                pos = pos.roundToInt().toFloat()
+            }
+        }
+        if (d.swipe) {
+            swipeDx = x - d.x0
+            val armed = abs(swipeDx) >= SWIPE
+            if (armed != swipeArmed) {
+                swipeArmed = armed
+                if (armed) fb.tick() else fb.tap()
+            }
+            return
         }
         // A drag down from the top opens the notifications. A drag up from the bottom opens search.
         // These drags do not turn the dial.
@@ -852,11 +953,22 @@ class LauncherState(
             endScrub()
             return
         }
+        if (d.swipe) {
+            val row = swipeRow
+            val armed = swipeArmed
+            clearSwipe()
+            target = pos.roundToInt().toFloat()
+            spin = Spin.Settle
+            run()
+            if (armed && row != null) swipeAt(row)
+            return
+        }
         val t = SystemClock.uptimeMillis()
         if (!d.moved && t - d.t0 < 450) {
             target = pos.roundToInt().toFloat()
             spin = Spin.Settle
-            if (!d.caught) tapAt(x, y)
+            if (carry != null) dropCarry()
+            else if (!d.caught) tapAt(x, y)
             run()
             return
         }
@@ -869,6 +981,7 @@ class LauncherState(
 
     fun onCancel() {
         cancelPress()
+        clearSwipe()
         lift = 0f
         val d = drag ?: return
         drag = null
@@ -910,7 +1023,7 @@ class LauncherState(
 
     private fun longPress() {
         val d = drag ?: return
-        if (d.moved) return
+        if (d.moved || carry != null) return
         press = null
         if (d.zone == Zone.Dial) {
             startScrub()
@@ -1034,6 +1147,8 @@ class LauncherState(
 
     /** Hold the clock or an empty spot: shape, theme, apps and feel, with cancel and done. */
     private fun openSetup() {
+        dropCarry()
+        closeFolder(quiet = true)
         prevCfg = cfg
         prevKeys = dialKeys
         prevCustom = customWall
@@ -1349,8 +1464,8 @@ class LauncherState(
     /** Sets the dial apps and keeps the selected app under the notch. */
     private fun setAppsKeep(next: Set<String>) {
         val cur = curApp()
-        if (cur != null) {
-            val ni = repo.apps.filter { it.key in next }.indexOfFirst { it.key == cur.key }
+        if (cur != null && folderKey == null) {
+            val ni = rowsFor(next).indexOfFirst { it.key == cur.key }
             if (ni >= 0) reindex(ni)
         }
         dialKeys = next
@@ -1406,10 +1521,11 @@ class LauncherState(
         val now = System.currentTimeMillis()
         prefs.syncDial(dialKeys, now)
         if (now - prefs.hintAt < Suggest.GAP) return false
-        val dial = dialApps
+        // Folders get no hints, and an app in a folder counts as on the dial.
+        val dial = rows.filter { it.kids == null }
         val byKey = repo.apps.associateBy { it.key }
         val sg = Suggest.pick(
-            now, dial.mapTo(HashSet()) { it.key }, byKey.keys, prefs.searchOpens(),
+            now, dial.mapTo(HashSet()) { it.key }, byKey.keys - folderApps(), prefs.searchOpens(),
             dial.associate { it.key to (opened[it.pkgUser] ?: 0L) }, prefs.dialSince(), prefs.quiet(),
         ) ?: return false
         val app = byKey[sg.key] ?: return false
@@ -1454,7 +1570,7 @@ class LauncherState(
 
     /** Counts an open from search or voice of an app that is not on the dial. */
     private fun markSearched(app: AppEntry) {
-        if (app.key !in dialKeys) prefs.markSearchOpen(app.key, System.currentTimeMillis())
+        if (placeOf(app.key) == null) prefs.markSearchOpen(app.key, System.currentTimeMillis())
     }
 
     // Quick actions: hold the selected app.
@@ -1502,6 +1618,287 @@ class LauncherState(
 
     fun menuRemove() = afterMenu(160) { removeFromDial(it) }
 
+    // Folders, swipes and the order of the rows.
+
+    /** The dial row under ([x], [y]) that a sideways swipe acts on, or null. */
+    private fun swipeRowAt(x: Float, y: Float, zone: Zone): Int? {
+        if (dialApps.isEmpty()) return null
+        return when (kind) {
+            Kind.Radial -> dialHit(x, y) ?: if (zone == Zone.Selected) pos.roundToInt() else null
+            Kind.Lens -> if (onLens(x, y)) lensRowAt(y) else null
+            else -> if (zone == Zone.Selected || zone == Zone.Dial) pos.roundToInt() else null
+        }
+    }
+
+    private fun clearSwipe() {
+        swipeRow = null
+        swipeDx = 0f
+        swipeArmed = false
+    }
+
+    /** The app that a swipe on [row] opens, or null. */
+    fun swipeTarget(row: AppEntry): AppEntry? =
+        swipes[row.key]?.let { k -> repo.apps.firstOrNull { it.key == k } }
+
+    /** A swipe on row [k]: a folder opens, an app opens its swipe app. In a folder, a swipe goes back out. */
+    private fun swipeAt(k: Int) {
+        if (folderKey != null) {
+            closeFolder()
+            return
+        }
+        val apps = dialApps
+        if (apps.isEmpty()) return
+        val row = apps[mod(k, apps.size)]
+        if (row.kids != null) {
+            enterFolder(k, row)
+            return
+        }
+        val t = swipeTarget(row)
+        if (t == null) {
+            fb.refuse()
+            showToast("hold ${row.display} to give it a swipe")
+            return
+        }
+        launchFrom(k, row, t)
+    }
+
+    private fun enterFolder(k: Int, row: AppEntry) {
+        fb.double()
+        fb.click(true)
+        folderBase = k
+        folderKey = row.key
+        jumpTo(0f)
+        followReadout()
+        run()
+    }
+
+    fun closeFolder(quiet: Boolean = false) {
+        if (folderKey == null) return
+        if (!quiet) {
+            fb.click(false)
+            fb.tap()
+        }
+        folderKey = null
+        jumpTo(folderBase.toFloat())
+        followReadout()
+        run()
+    }
+
+    /** Hold a row, then "move": the row rides in the notch while the dial turns. A tap drops it. */
+    fun menuMove() = afterMenu(160) { app ->
+        carryBefore = dialApps.map { it.key }
+        carryIn = folderKey
+        carry = app.key
+        fb.double()
+        showToast("turn the dial to move ${app.display}, tap to drop it")
+    }
+
+    private fun carryStep() {
+        val key = carry ?: return
+        val keys = dialApps.map { it.key }
+        val from = keys.indexOf(key)
+        if (from < 0) {
+            carry = null
+            return
+        }
+        applyOrder(moved(keys, from, selIndex(keys.size)), carryIn)
+    }
+
+    fun dropCarry() {
+        val key = carry ?: return
+        val before = carryBefore
+        val inFolder = carryIn
+        carry = null
+        carryBefore = null
+        fb.click(true)
+        fb.double()
+        val now = dialApps.map { it.key }
+        val name = dialApps.firstOrNull { it.key == key }?.display ?: "it"
+        if (before != null && before != now) showToast("moved $name") { applyOrder(before, inFolder) }
+    }
+
+    /** Saves the row order of the dial, or of the folder [inFolder]. */
+    private fun applyOrder(keys: List<String>, inFolder: String?) {
+        if (inFolder == null) {
+            order = keys
+            prefs.order = keys
+        } else {
+            saveFolders(folders.map { f -> if (f.key == inFolder) f.copy(keys = keys + f.keys.filter { it !in keys }) else f })
+        }
+    }
+
+    private fun saveFolders(next: List<Folder>) {
+        folders = next
+        prefs.folders = next
+    }
+
+    private fun saveSwipes(next: Map<String, String>) {
+        swipes = next
+        prefs.swipes = next
+    }
+
+    /** Puts dial, order, folders and swipes back as they were. */
+    private fun restore(keys: Set<String>, ord: List<String>, fs: List<Folder>, sw: Map<String, String>) {
+        saveFolders(fs)
+        saveSwipes(sw)
+        order = ord
+        prefs.order = ord
+        setAppsKeep(keys)
+    }
+
+    /** What the search sheet gathers apps for, or null. */
+    var gather by mutableStateOf<Gather?>(null)
+        private set
+
+    /** The row the gather is for: an app, or a folder. */
+    private var gatherRow by mutableStateOf<String?>(null)
+
+    /** The swipe app of the row that the swipe sheet edits, or null. */
+    val gatherSwipe: AppEntry? get() = gatherRow?.let { r -> swipes[r] }?.let { k -> repo.apps.firstOrNull { it.key == k } }
+
+    /** The apps picked for the folder, cover first. */
+    var gatherKeys by mutableStateOf<List<String>>(emptyList())
+        private set
+    var folderName by mutableStateOf("")
+
+    /** The row that the gather sheet edits, as it shows on the dial. */
+    var gatherLabel by mutableStateOf("")
+        private set
+
+    /** Hold an app, then "make a folder", or hold a folder, then "edit folder". */
+    fun menuFolder() = afterMenu(160) { row ->
+        openSearch()
+        gather = Gather.Folder
+        gatherRow = row.key
+        gatherLabel = row.display
+        gatherKeys = row.kids?.map { it.key } ?: listOf(row.key)
+        folderName = if (row.kids != null) row.display else ""
+    }
+
+    /** Hold an app, then "swipe": pick the app that a sideways swipe on it opens. */
+    fun menuSwipe() = afterMenu(160) { row ->
+        openSearch()
+        gather = Gather.Swipe
+        gatherRow = row.key
+        gatherLabel = row.display
+    }
+
+    /** A tap on an app in the search sheet. [y] is the row centre in design units. */
+    fun resultTap(app: AppEntry, y: Float) {
+        when (gather) {
+            Gather.Folder -> {
+                fb.tick()
+                gatherKeys = if (app.key in gatherKeys) gatherKeys - app.key else gatherKeys + app.key
+            }
+            Gather.Swipe -> setSwipe(app)
+            null -> if (pick) pickQuick(app) else openFromSearch(app, y)
+        }
+    }
+
+    /** Sets the swipe app of the gather row, or clears it with null. */
+    fun setSwipe(app: AppEntry?) {
+        val row = gatherRow ?: return
+        val before = swipes
+        fb.double()
+        fb.click(false)
+        saveSwipes(if (app == null) swipes - row else swipes + (row to app.key))
+        search = false
+        gather = null
+        val text = if (app == null) "$gatherLabel has no swipe" else "swipe $gatherLabel to open ${app.display}"
+        showToast(text) { saveSwipes(before) }
+    }
+
+    /** "done" on the folder sheet: makes the folder, or saves the changes to it. */
+    fun saveFolder() {
+        val row = gatherRow ?: return
+        val keys = gatherKeys
+        val byKey = repo.apps.associateBy { it.key }
+        val name = folderName.trim().lowercase().ifEmpty { guessFolderName(keys.mapNotNull { byKey[it]?.label }) }
+        val beforeKeys = dialKeys
+        val beforeOrder = order
+        val beforeFolders = folders
+        val beforeSwipes = swipes
+        val rowKeys = rows.map { it.key }
+        search = false
+        gather = null
+        if (isFolderKey(row)) {
+            if (keys.isEmpty()) {
+                // An empty folder leaves the dial.
+                saveFolders(folders.filter { it.key != row })
+                setAppsKeep(dialKeys - row)
+            } else {
+                saveFolders(folders.map { if (it.key == row) it.copy(name = name, keys = keys) else it })
+            }
+            fb.double()
+            showToast("saved $name") { restore(beforeKeys, beforeOrder, beforeFolders, beforeSwipes) }
+            return
+        }
+        if (keys.size < 2) {
+            fb.refuse()
+            showToast("a folder needs at least 2 apps")
+            return
+        }
+        val f = Folder(System.currentTimeMillis().toString(36), name, keys)
+        // The folder takes the place of the held app. Apps that move into it leave the dial,
+        // unless the dial would drop below its smallest size.
+        val moving = keys.filter { it in dialKeys && it != row }.toSet()
+        val keep = rowKeys.size - 1 - moving.size + 1 < Suggest.MIN_DIAL
+        val nextKeys = dialKeys - row - (if (keep) emptySet() else moving) + f.key
+        val nextOrder = rowKeys.flatMap { k ->
+            when {
+                k == row -> listOf(f.key)
+                !keep && k in moving -> emptyList()
+                else -> listOf(k)
+            }
+        }
+        saveFolders(folders + f)
+        order = nextOrder
+        prefs.order = nextOrder
+        swipes[row]?.let { saveSwipes(swipes - row) }
+        setAppsKeep(nextKeys)
+        fb.double()
+        fb.click(false)
+        showToast("made folder $name, swipe it to open") { restore(beforeKeys, beforeOrder, beforeFolders, beforeSwipes) }
+    }
+
+    /** Hold a folder, then "ungroup": its apps take its place on the dial. */
+    fun menuUngroup() = afterMenu(160) { row ->
+        val kids = row.kids ?: return@afterMenu
+        val beforeKeys = dialKeys
+        val beforeOrder = order
+        val beforeFolders = folders
+        val add = kids.map { it.key }.filter { it !in dialKeys }
+        val nextOrder = rows.map { it.key }.flatMap { if (it == row.key) add else listOf(it) }
+        order = nextOrder
+        prefs.order = nextOrder
+        saveFolders(folders.filter { it.key != row.key })
+        setAppsKeep(dialKeys - row.key + add)
+        fb.double()
+        showToast("ungrouped ${row.display}") { restore(beforeKeys, beforeOrder, beforeFolders, swipes) }
+    }
+
+    /** In a folder: hold an app, then "take out". It goes on the dial next to the folder. */
+    fun menuTakeOut() = afterMenu(160) { app ->
+        val fk = folderKey ?: return@afterMenu
+        val f = folders.firstOrNull { it.key == fk } ?: return@afterMenu
+        if (f.keys.size <= 1) {
+            fb.refuse()
+            showToast("ungroup the folder instead")
+            return@afterMenu
+        }
+        val beforeKeys = dialKeys
+        val beforeOrder = order
+        val beforeFolders = folders
+        val nextOrder = rows.map { it.key }.flatMap { if (it == fk) listOf(fk, app.key) else listOf(it) }
+        saveFolders(folders.map { if (it.key == fk) it.copy(keys = it.keys - app.key) else it })
+        order = nextOrder
+        prefs.order = nextOrder
+        dialKeys = dialKeys + app.key
+        persist()
+        fb.double()
+        showToast("took ${app.display} out of ${f.name.lowercase()}") { restore(beforeKeys, beforeOrder, beforeFolders, swipes) }
+    }
+
     private fun afterQuickMenu(action: (slot: Int, app: AppEntry) -> Unit) {
         val m = menu ?: return
         val slot = m.slot ?: return
@@ -1535,6 +1932,7 @@ class LauncherState(
         pick = false
         pickFor = null
         web = false
+        gather = null
         recentKeys = prefs.recent
         search = true
     }
@@ -1604,7 +2002,7 @@ class LauncherState(
     fun searchEnter() {
         if (web) return searchWeb()
         val app = matches(query).firstOrNull() ?: return
-        if (pick) pickQuick(app) else openFromSearch(app, 200f)
+        resultTap(app, 200f)
     }
 
     /** Opens a search result. [y] is the row centre in design units. */
@@ -1895,23 +2293,30 @@ class LauncherState(
     }
 
     fun launchSelected() {
-        val app = curApp() ?: return
+        val row = curApp() ?: return
         val from = selectedPose() ?: return
-        openApp(app.display, app.key, app.pkgUser, from, "", true) { host.launchApp(app, it) }
+        // A folder opens its cover app; a swipe opens the folder.
+        val app = row.target
+        openApp(app.display, row.key, app.pkgUser, from, "", true) { host.launchApp(app, it) }
     }
 
     /** Opens the app at row [k]. The name lifts off where it is, and the dial turns the app into the notch. */
     private fun launchAt(k: Int) {
         val apps = dialApps
         if (apps.isEmpty()) return
-        val app = apps[mod(k, apps.size)]
+        val row = apps[mod(k, apps.size)]
+        launchFrom(k, row, row.target)
+    }
+
+    /** Opens [app] from dial row [k], which shows [row]. */
+    private fun launchFrom(k: Int, row: AppEntry, app: AppEntry) {
         val d = k - pos
-        val n = app.display.length
+        val n = row.display.length
         val s = labelScale(abs(d), n)
         val p = labelPose(d, n, s, Geo(radius, cy, layout.ax), layout.markers, left)
         target = k.toFloat()
         spin = Spin.Settle
-        openApp(app.display, app.key, app.pkgUser, Pose(p.x, p.y, p.rot, s * 15f / 44f, p.tx), "", true) {
+        openApp(app.display, row.key, app.pkgUser, Pose(p.x, p.y, p.rot, s * 15f / 44f, p.tx), "", true) {
             host.launchApp(app, it)
         }
     }

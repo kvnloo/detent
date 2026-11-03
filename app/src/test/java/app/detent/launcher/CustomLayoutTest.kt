@@ -27,7 +27,7 @@ class CustomLayoutTest {
         assertNull(decodeLayout("330|Double|4"))
         assertNull(decodeLayout("9000|Double|4|Double"))
         assertNull(decodeLayout("330|Sparkles|4|Double"))
-        assertNull(decodeLayout("330|Double|0|Double"))
+        assertNull(decodeLayout("330|Double|13|Double"))
     }
 
     @Test

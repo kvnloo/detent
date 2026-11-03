@@ -63,7 +63,8 @@ class Layout(
 // Declared before LAYOUTS: the custom entry reads CURVES while LAYOUTS initialises.
 /** Rim radius per curve name, flattest first. */
 val CURVES = listOf("flat" to 560f, "wide" to 420f, "soft" to 330f, "round" to 220f, "tight" to 170f)
-val DENSITIES = listOf(1, 2, 3, 4, 6, 8, 10)
+/** Marks per app. 0 is auto: one mark per app in the row, so a folder shows how many apps it holds. */
+val DENSITIES = listOf(0, 1, 2, 3, 4, 6, 8, 10)
 
 val LAYOUTS: MutableList<Layout> = mutableListOf(
     Layout("soft · radial · double", 330f, Markers.Double, 4),
@@ -102,7 +103,7 @@ fun decodeLayout(s: String?): Layout? {
     if (p.size != 4) return null
     val r = p[0].toFloatOrNull()?.takeIf { it in 120f..800f } ?: return null
     val m = Markers.entries.firstOrNull { it.name == p[1] } ?: return null
-    val t = p[2].toIntOrNull()?.takeIf { it in 1..12 } ?: return null
+    val t = p[2].toIntOrNull()?.takeIf { it in 0..12 } ?: return null
     val n = Markers.entries.firstOrNull { it.name == p[3] } ?: return null
     return customLayout(r, m, t, n)
 }
