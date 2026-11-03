@@ -1861,6 +1861,8 @@ class LauncherState(
 
     /** True while the hold that opened the panes is still down; then the row alone picks. */
     private var paneHolding = false
+    private var paneDeepX = 0f
+    private var paneSideArmed = false
     private var swipeEnd = 0f
 
     /** True for a sideways move [dx] away from the dial centre, toward the open side where the panes show. */
@@ -1970,7 +1972,11 @@ class LauncherState(
     private fun paneTouch(x: Float, y: Float, pressure: Float) {
         val g = Geo(radius, cy, layout.ax)
         val p = polar(mirX(x), y, g.cx, cy, g.step)
-        val hit = pickSlot(paneSlots(if (paneDeep) 1f else 0f), p, paneDeep, strict = !paneHolding)
+        if (paneDeep && abs(x - paneDeepX) >= 12f) paneSideArmed = true
+        // Expanding columns must not move a stationary finger onto a destructive side action.
+        val hit = if (paneDeep && !paneSideArmed) {
+            paneSlots(1f).firstOrNull { it.col == Col.Main && it.index == paneAnchor }
+        } else pickSlot(paneSlots(if (paneDeep) 1f else 0f), p, paneDeep, strict = !paneHolding)
         // A finger at rest sends no moves; look again once the dwell is up.
         dwellJob?.cancel()
         if (!paneDeep && hit != null) dwellJob = scope.launch {
@@ -1993,6 +1999,8 @@ class LauncherState(
             (hit.pane.out.isNotEmpty() || hit.pane.inn.isNotEmpty())
         ) {
             paneAnchor = hit.index
+            paneDeepX = x
+            paneSideArmed = false
             paneDeep = true
             fb.pop()
         }
