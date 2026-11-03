@@ -5,6 +5,12 @@ import androidx.core.content.edit
 
 class Saved(val cfg: Cfg, val keys: Set<String>, val pos: Int)
 
+// A name survives insertions and reordering; the old index supports earlier versions.
+internal fun savedThemeIndex(name: String?, legacyIndex: Int, names: List<String>): Int {
+    val byName = name?.let { names.indexOf(it) } ?: -1
+    return if (byName >= 0) byName else legacyIndex.takeIf { it in names.indices } ?: 0
+}
+
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("detent", Context.MODE_PRIVATE)
     private val openedSp = ctx.getSharedPreferences("detent.opened", Context.MODE_PRIVATE)
@@ -19,7 +25,7 @@ class Prefs(ctx: Context) {
         val cfg = Cfg(
             layout = sp.getInt("layout", 0).coerceIn(LAYOUTS.indices),
             theme = sp.getString("themeImportId", null)?.let { id -> THEMES.indexOfFirst { it.importId == id }.takeIf { it >= 0 } }
-                ?: sp.getInt("theme", 0).coerceIn(THEMES.indices),
+                ?: savedThemeIndex(sp.getString("themeName", null), sp.getInt("theme", 0), THEME_NAMES),
             side = if (sp.getString("side", "right") == "left") Side.Left else Side.Right,
         )
         return Saved(cfg, sp.getStringSet("apps", null).orEmpty().toSet(), sp.getInt("pos", 0))
@@ -30,12 +36,37 @@ class Prefs(ctx: Context) {
         putInt("layout", cfg.layout)
         putInt("theme", cfg.theme)
         putString("themeImportId", THEMES[cfg.theme].importId)
+        putString("themeName", THEME_NAMES.getOrNull(cfg.theme))
         putString("side", if (cfg.side == Side.Left) "left" else "right")
         putStringSet("apps", HashSet(keys))
         putInt("pos", pos)
     }
 
     fun savePos(pos: Int) = sp.edit { putInt("pos", pos) }
+
+    /** Apply an imported setup as one preferences transaction. Local wallpaper files are left alone. */
+    fun restore(data: SettingsData, cfg: Cfg, keys: Set<String>) = sp.edit {
+        putBoolean("done", true)
+        putInt("layout", cfg.layout)
+        putInt("theme", cfg.theme)
+        putString("themeName", THEME_NAMES.getOrNull(cfg.theme))
+        putString("themeImportId", THEMES[cfg.theme].importId)
+        putString("side", if (cfg.side == Side.Left) "left" else "right")
+        putStringSet("apps", HashSet(keys))
+        putInt("pos", 0)
+        putString("quicks", data.quick.joinToString("\n") { it.key + "\t" + (it.icon ?: "") })
+        remove("quick")
+        remove("quickIcon")
+        putString("recent", data.recent.joinToString("\n"))
+        putBoolean("sound", data.sound)
+        putBoolean("haptics", data.haptics)
+        putBoolean("dots", data.dots)
+        putBoolean("lockWall", data.lockWall)
+        putBoolean("ownBar", data.ownBar)
+        putBoolean("voice", data.voice)
+        putBoolean("webSearch", data.webSearch)
+        remove("appliedWall")
+    }
 
     var sound: Boolean
         get() = sp.getBoolean("sound", true)

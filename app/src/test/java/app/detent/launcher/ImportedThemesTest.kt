@@ -70,6 +70,17 @@ class ImportedThemesTest {
         assertEquals(id, THEMES[prefs.load()!!.cfg.theme].importId)
     }
 
+    @Test fun restoringABuiltInThemeClearsThePreviousImportedIdentity() {
+        ImportedThemes.install(ctx, listOf(favorite)) { }
+        ImportedThemes.load(ctx)
+        val prefs = Prefs(ctx)
+        prefs.save(Cfg(theme = THEMES.lastIndex), emptySet(), 0)
+        val data = SettingsData(LAYOUTS[0].name, THEMES[0].name, "right", emptySet(), emptyList(), emptyList(),
+            true, true, false, false, false, false, false)
+        prefs.restore(data, Cfg(theme = 0), emptySet())
+        assertEquals(0, prefs.load()!!.cfg.theme)
+    }
+
     @Test fun liveReloadKeepsImportedFavoritesAndParallelListsAligned() {
         ImportedThemes.install(ctx, listOf(favorite)) { }
         ImportedThemes.load(ctx)
