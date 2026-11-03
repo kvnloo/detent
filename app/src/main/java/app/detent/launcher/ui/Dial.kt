@@ -31,6 +31,7 @@ import app.detent.launcher.LauncherState
 import app.detent.launcher.Layout
 import app.detent.launcher.Markers
 import app.detent.launcher.Palette
+import app.detent.launcher.QuickIcons
 import app.detent.launcher.Step
 import app.detent.launcher.THEME_NAMES
 import app.detent.launcher.W
@@ -57,6 +58,7 @@ fun DialCanvas(s: LauncherState, pal: Palette, wave: VoiceWave) {
     val apps = s.dialApps
     val names = scrub ?: if (themeStep) THEME_NAMES else remember(apps) { apps.map { it.display } }
     val dots = if (scrub == null && !themeStep) apps.map { s.hasDot(it) } else null
+    val icons = if (scrub == null && !themeStep) remember(apps, s.folderIcons) { apps.map { s.rowIcon(it) } } else null
     // Auto density gives each row one mark per app it holds.
     val counts = if (scrub == null && !themeStep) remember(apps) { apps.map { it.count } } else emptyList()
     val swipe = s.swipeRow?.let { r -> Swipe(mod(r, maxOf(1, names.size)), s.swipeDx, s.swipeArmed) }
@@ -76,7 +78,7 @@ fun DialCanvas(s: LauncherState, pal: Palette, wave: VoiceWave) {
         val g = Geo(s.radius, u.cy)
         if (look != null) drawGlassBand(fx, g, u.k, pal, layout.markers, left, look)
         drawMarks(s.pos, g, u.k, pal, layout, left, wave, counts)
-        drawLabels(s.pos, g, u.k, pal, layout, left, names, dots, hide, scrub != null, measurer, regular, medium, swipe)
+        drawLabels(s.pos, g, u.k, pal, layout, left, names, dots, icons, hide, scrub != null, measurer, regular, medium, swipe)
         drawNotch(s.pawl, g, u.k, pal, layout.notch, left, fx, look ?: Glass.Clear.look!!)
     }
 }
@@ -209,6 +211,7 @@ private fun DrawScope.drawLabels(
     left: Boolean,
     names: List<String>,
     dots: List<Boolean>?,
+    icons: List<String?>?,
     hide: Int,
     scrubbing: Boolean,
     measurer: TextMeasurer,
@@ -232,6 +235,9 @@ private fun DrawScope.drawLabels(
         val op = if (i == hide) 0f else (1 - a / g.span).pow(1.35f)
         if (op < .004f) continue
         val text = measurer.measure(name, if (sel) medium else regular)
+        val icon = icons?.getOrNull(i)
+        // An emoji name gives way to its hairline icon, which matches the type and the theme.
+        val iconOnly = icon != null && QuickIcons.markOnly(name)
         // The swiped name follows the finger a little, and lights up once the swipe counts.
         val sw = if (swipe != null && swipe.row == i) swipe else null
         val sx = sw?.let { (it.dx * .45f).coerceIn(-48f, 48f) } ?: 0f
@@ -240,12 +246,16 @@ private fun DrawScope.drawLabels(
             rotate(Math.toDegrees(p.rot.toDouble()).toFloat(), Offset.Zero)
             scale(s, s, Offset.Zero)
         }) {
-            drawText(
-                text,
-                color = if (sel || sw?.armed == true) pal.accent else pal.fg,
-                topLeft = Offset(p.tx * text.size.width, -text.size.height / 2f),
-                alpha = op,
-            )
+            val color = if (sel || sw?.armed == true) pal.accent else pal.fg
+            val tw = if (iconOnly) 0f else text.size.width.toFloat()
+            if (!iconOnly) drawText(text, color = color, topLeft = Offset(p.tx * tw, -text.size.height / 2f), alpha = op)
+            if (icon != null) {
+                // The icon sits on the far side of the name from the rim, so the marks stay clear.
+                val box = 14f * k
+                val gap = 6f * k
+                val ix = if (p.tx < 0f) -tw - gap - box else tw + gap
+                drawQuickIcon(icon, color.copy(alpha = color.alpha * op), Offset(ix, -box / 2f), box, 1.3f * k)
+            }
         }
         if (dots != null && dots[i]) drawCircle(pal.accent, 2.5f * k, Offset(p.bx * k, p.by * k), alpha = op)
     }
