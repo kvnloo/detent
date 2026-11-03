@@ -60,6 +60,11 @@ class Layout(
     fun cy(hd: Float) = if (grid) snap(476f + (hd - H0) / 2f) else CY0 + (hd - H0) / 2f
 }
 
+// Declared before LAYOUTS: the custom entry reads CURVES while LAYOUTS initialises.
+/** Rim radius per curve name, flattest first. */
+val CURVES = listOf("flat" to 560f, "wide" to 420f, "soft" to 330f, "round" to 220f, "tight" to 170f)
+val DENSITIES = listOf(1, 2, 3, 4, 6, 8, 10)
+
 val LAYOUTS: MutableList<Layout> = mutableListOf(
     Layout("soft · radial · double", 330f, Markers.Double, 4),
     Layout("round · radial · double", 200f, Markers.Double, 5),
@@ -80,10 +85,6 @@ val LAYOUTS: MutableList<Layout> = mutableListOf(
 
 /** Index of the custom dial in [LAYOUTS]. */
 val CUSTOM get() = LAYOUTS.lastIndex
-
-/** Rim radius per curve name, flattest first. */
-val CURVES = listOf("flat" to 560f, "wide" to 420f, "soft" to 330f, "round" to 220f, "tight" to 170f)
-val DENSITIES = listOf(1, 2, 3, 4, 6, 8, 10)
 
 fun curveName(r: Float) = CURVES.minBy { kotlin.math.abs(it.second - r) }.first
 
