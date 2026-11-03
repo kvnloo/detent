@@ -331,6 +331,32 @@ class LauncherState(
     private var layoutRev by mutableIntStateOf(0)
     val layout: Layout get() = layoutRev.let { LAYOUTS[cfg.layout] }
 
+    /** Off the dial, a tap opens the selected app. On the dial, a tap still opens the app under the finger. */
+    var tapOpens by mutableStateOf(prefs.tapOpens)
+        private set
+
+    fun toggleTapOpens() {
+        tap()
+        tapOpens = !tapOpens
+        prefs.tapOpens = tapOpens
+    }
+
+    /**
+     * The row whose name or mark is under ([x], [y]), or null. A row's target is its own angular slot
+     * (half a row each side) between the far end of its name and just outside the rim.
+     */
+    internal fun dialHit(x: Float, y: Float): Int? {
+        val g = Geo(radius, cy, layout.ax)
+        val dx = g.cx - mirX(x)
+        val dy = y - cy
+        val dist = hypot(dx, dy)
+        val kf = pos + atan2(dy, dx) / g.step
+        val n = dialApps.size
+        if (n == 0) return null
+        val name = dialApps[mod(kf.roundToInt(), n)].display
+        return dialSlot(dist, kf, pos, g, layout.markers, name.length)
+    }
+
     /** The assistant the voice button opens, or null for Detent's own listening. */
     var micApp by mutableStateOf(prefs.micApp)
         private set
@@ -901,6 +927,12 @@ class LauncherState(
             return
         }
         if (y < 200 || y > hd - 102) return
+        if (tapOpens && ob == null && kind == Kind.Radial) {
+            // Quick launch on the dial; anywhere else opens what the notch points at.
+            val hit = dialHit(x, y)
+            if (hit == null || hit == pos.roundToInt()) launchSelected() else launchAt(hit)
+            return
+        }
         val g = Geo(radius, cy, layout.ax)
         val dx = g.cx - mirX(x)
         val dy = y - cy

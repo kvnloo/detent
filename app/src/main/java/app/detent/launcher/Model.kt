@@ -248,6 +248,19 @@ fun labelScale(a: Float, chars: Int): Float {
     return min(1 + .45f * cl * cl, fitScale(chars))
 }
 
+/**
+ * The dial row under a touch at [dist] units from the dial centre and [kf] rows round from row 0, or null.
+ * A row owns its angular slot (within .45 rows) from the far end of its [chars]-glyph name to 16 units
+ * outside the rim, where the marks are.
+ */
+fun dialSlot(dist: Float, kf: Float, pos: Float, g: Geo, m: Markers, chars: Int): Int? {
+    val k = kotlin.math.round(kf).toInt()
+    if (kotlin.math.abs(kf - k) > .45f || kotlin.math.abs(k - pos) > g.span) return null
+    val w = chars * CH * labelScale(kotlin.math.abs(k - pos), chars)
+    val inner = labelRadius(g, m) - w - 14f
+    return if (dist >= inner && dist <= g.r + 16f) k else null
+}
+
 fun labelRadius(g: Geo, m: Markers) = g.r - when (m) {
     Markers.Ticks -> 28f
     Markers.Double -> 34f

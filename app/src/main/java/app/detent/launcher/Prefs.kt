@@ -101,6 +101,11 @@ class Prefs(ctx: Context) {
         get() = sp.getFloat("gridVis", 1f)
         set(v) = sp.edit { putFloat("gridVis", v) }
 
+    /** A tap off the dial opens the selected app, instead of the row level with the tap. */
+    var tapOpens: Boolean
+        get() = sp.getBoolean("tapOpens", false)
+        set(v) = sp.edit { putBoolean("tapOpens", v) }
+
     /** Package of the assistant that the voice button opens, or null for Detent's own listening. */
     var micApp: String?
         get() = sp.getString("micApp", null)

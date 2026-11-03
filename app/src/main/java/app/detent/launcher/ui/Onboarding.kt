@@ -86,7 +86,7 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
 
     // The feel step has one more row of chips.
     val controlsY = u.navY - when {
-        step == Step.FEEL -> 266f
+        step == Step.FEEL -> if (s.layout.grid) 266f else 314f
         step == Step.SHAPE && s.customOpen -> 300f
         // Two rows of layout numbers.
         step == Step.SHAPE -> 216f
@@ -173,6 +173,9 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
                     Row(horizontalArrangement = gap) {
                         Chip("grid ${(s.gridVis * 100).roundToInt()}%", s.gridVis > 0f, pal, { s.cycleGrid() })
                         Chip("glass · ${s.glass.label}", s.glass.on, pal, { s.cycleGlass() })
+                    }
+                    if (!s.layout.grid) Row(horizontalArrangement = gap) {
+                        Chip("tap off the dial opens selected", s.tapOpens, pal, { s.toggleTapOpens() })
                     }
                     Row(horizontalArrangement = gap) {
                         Chip("voice", s.voice, pal, { s.toggleVoice() })
