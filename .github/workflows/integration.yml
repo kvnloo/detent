@@ -1,0 +1,79 @@
+name: Nightly integration
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    - cron: '37 7 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-integration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  android:
+    name: Android API ${{ matrix.api }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 36]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Scheduled work lives on main but tests nightly, never main by accident.
+          # PR calls keep GitHub's merge ref: this lane qualifies the integration tree.
+          ref: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'nightly' || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Full unit suite including live collection sources
+        env:
+          DETENT_IMPORT_SMOKE: '1'
+        run: |
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug \
+            -PdetentId=app.detent.launcher.lab -PdetentChannel=nightly \
+            -PdetentCommit="$(git rev-parse HEAD)" -PdetentRun="$GITHUB_RUN_ID"
+      - name: Enable KVM (missing virtualization is a failing integration gate, not a pass)
+        run: |
+          test -c /dev/kvm
+          sudo chmod a+rw /dev/kvm
+      - name: Native launcher integration journeys
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -PdetentId=app.detent.launcher.lab -PdetentChannel=nightly -PdetentCommit=$(git rev-parse HEAD) -PdetentRun=$GITHUB_RUN_ID
+      - name: Record the actual tested tree
+        if: always()
+        run: |
+          mkdir -p integration-evidence
+          git rev-parse HEAD > integration-evidence/source-sha.txt
+          adb logcat -d -t 2000 > integration-evidence/logcat.txt || true
+          adb exec-out screencap -p > integration-evidence/screen.png || true
+          adb pull /sdcard/Android/data/app.detent.launcher.lab/files/test-evidence integration-evidence/ || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-api-${{ matrix.api }}-${{ github.run_id }}
+          path: |
+            integration-evidence/
+            app/build/reports/
+            app/build/test-results/
+            app/build/outputs/androidTest-results/
+          retention-days: 14
+          if-no-files-found: error
