@@ -126,10 +126,126 @@ half4 main(float2 p) {
 }
 """
 
+/*
+ * A pane of glass shaped as a slice of a ring: the band between rIn and rOut, cut to the angles mid ± half,
+ * with rounded corners. The edge is a signed distance in the ring's own polar frame (out along the radius,
+ * across along the arc), so the bezel, rim and specular follow the curve of the dial. Same light as SRC.
+ */
+private const val SLICE_SRC = """
+uniform float2 c;
+uniform float rIn;
+uniform float rOut;
+uniform float mid;
+uniform float span;
+uniform float corner;
+uniform half4 tint;
+uniform float fresnel;
+uniform float specular;
+uniform float bevel;
+uniform float noise;
+uniform float chroma;
+uniform float bw;
+
+float hash(float2 p) { return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
+
+// Rounded box in the polar frame. q: (out from the band middle, along the arc). Positive inside.
+float inside(float2 q, float2 b, float rc, float grow) {
+    float2 w = abs(q) - b + rc - grow;
+    return -(length(max(w, 0.0)) + min(max(w.x, w.y), 0.0) - rc);
+}
+
+half4 main(float2 p) {
+    float2 v = p - c;
+    float d = length(v);
+    float a = atan(v.y, v.x) - mid;
+    a = a - 6.2831853 * floor((a + 3.1415927) / 6.2831853);
+    float2 q = float2(d - (rIn + rOut) * 0.5, d * a);
+    float2 b = float2((rOut - rIn) * 0.5, d * span);
+    float rc = min(corner, min(b.x, b.y));
+    float e = inside(q, b, rc, 0.0);
+    if (e < -1.0) return half4(0.0);
+    float aa = clamp(e + 0.5, 0.0, 1.0);
+    float2 n = v / max(d, 0.001);
+    float2 t = float2(-n.y, n.x);
+    // Normal of the nearest edge, from the polar frame back to the screen.
+    float2 w = abs(q) - b + rc;
+    float2 nl = (w.x > 0.0 && w.y > 0.0) ? normalize(w) : (w.x > w.y ? float2(1.0, 0.0) : float2(0.0, 1.0));
+    nl *= sign(q + 0.0001);
+    float2 nrm = n * nl.x + t * nl.y;
+    float2 L = float2(-0.7071, -0.7071);
+    float prox = exp(-max(e, 0.0) / bw);
+    float p2 = prox * prox;
+
+    float s = chroma * 0.35 * bw;
+    float fr = exp(-max(inside(q, b, rc, -s), 0.0) / bw);
+    float fb = exp(-max(inside(q, b, rc, s), 0.0) / bw);
+    half3 rim = half3(fr * fr, p2, fb * fb) * fresnel * 0.55;
+
+    float lit = max(dot(nrm, L), 0.0);
+    float spec = pow(lit, 6.0) * p2 * specular * 1.2;
+    float line = exp(-max(e, 0.0) / max(bw * 0.12, 1.0)) * fresnel * 0.5;
+    // Sheen on the lit half of the pane, like the top highlight of a glass card.
+    float2 u = float2(q.x / max(b.x, 1.0), q.y / max(b.y, 1.0));
+    float2 su = n * u.x + t * u.y;
+    float sheen = max(-su.y * 0.7 - su.x * 0.3, 0.0) * specular * 0.09;
+    float shade = max(dot(nrm, -L), 0.0) * p2 * bevel * 0.45;
+
+    half3 pm = tint.rgb * tint.a;
+    float al = tint.a;
+    half3 light = rim + half3(1.0, 0.99, 0.97) * (spec + line + sheen);
+    pm += light;
+    al += clamp((rim.g + spec + line + sheen) * 0.75, 0.0, 1.0);
+    float sh = clamp(shade, 0.0, 0.6) * 0.5;
+    pm *= 1.0 - sh;
+    al = al + sh * (1.0 - al);
+    pm += (hash(p) - 0.5) * noise * 0.18 * al;
+    al = clamp(al, 0.0, 1.0);
+    return half4(clamp(pm, half3(0.0), half3(al)), al) * aa;
+}
+"""
+
 /** Draws lit glass bands and beads. Null shader below Android 13; then it draws a plain tinted band. */
 class GlassFx {
     private val shader: RuntimeShader? = if (Build.VERSION.SDK_INT >= 33) RuntimeShader(SRC) else null
     private val brush = shader?.let { ShaderBrush(it) }
+    private val slicer: RuntimeShader? = if (Build.VERSION.SDK_INT >= 33) RuntimeShader(SLICE_SRC) else null
+    private val sliceBrush = slicer?.let { ShaderBrush(it) }
+
+    /**
+     * A glass pane cut from the ring round ([cx], [cy]) between radii [rIn] and [rOut], centred on the screen
+     * angle [mid] and [half] radians to each side. All lengths in px. Below Android 13 a tinted slice with a rim.
+     */
+    fun DrawScope.slice(
+        cx: Float, cy: Float, rIn: Float, rOut: Float, mid: Float, half: Float, corner: Float,
+        tint: Color, rimColor: Color, g: GlassLook, k: Float,
+    ) {
+        val sh = slicer
+        val br = sliceBrush
+        if (sh == null || br == null) {
+            val path = slicePath(cx, cy, rIn, rOut, mid, half)
+            drawPath(path, tint)
+            drawPath(path, rimColor, style = androidx.compose.ui.graphics.drawscope.Stroke(k))
+            return
+        }
+        sh.setFloatUniform("c", cx, cy)
+        sh.setFloatUniform("rIn", rIn)
+        sh.setFloatUniform("rOut", rOut)
+        sh.setFloatUniform("mid", mid)
+        sh.setFloatUniform("span", half)
+        sh.setFloatUniform("corner", corner)
+        sh.setFloatUniform("tint", tint.red, tint.green, tint.blue, tint.alpha)
+        sh.setFloatUniform("fresnel", g.fresnel)
+        sh.setFloatUniform("specular", g.specular)
+        sh.setFloatUniform("bevel", g.bevel)
+        sh.setFloatUniform("noise", g.noise)
+        sh.setFloatUniform("chroma", g.chroma)
+        sh.setFloatUniform("bw", maxOf(2f * k, minOf(rOut - rIn, 2f * rOut * half) * .22f))
+        // Only the box round the slice runs the shader.
+        val pts = listOf(rIn, rOut).flatMap { r -> listOf(-1f, -.5f, 0f, .5f, 1f).map { mid + half * it }.map { a -> Offset(cx + r * kotlin.math.cos(a), cy + r * kotlin.math.sin(a)) } }
+        val x0 = pts.minOf { it.x } - 4
+        val y0 = pts.minOf { it.y } - 4
+        drawRect(br, Offset(x0, y0), Size(pts.maxOf { it.x } + 4 - x0, pts.maxOf { it.y } + 4 - y0))
+    }
 
     /** A glass ring centred at [cx], [cy] (px) between radii [rIn] and [rOut] (px). */
     fun DrawScope.band(cx: Float, cy: Float, rIn: Float, rOut: Float, tint: Color, g: GlassLook, k: Float) {
@@ -155,4 +271,14 @@ class GlassFx {
     /** A glass bead: a disc of radius [r] (px). */
     fun DrawScope.bead(cx: Float, cy: Float, r: Float, tint: Color, g: GlassLook, k: Float) =
         band(cx, cy, -100000f, r, tint, g, k)
+}
+
+/** The outline of a ring slice, for the plain look below Android 13. Angles in radians, lengths in px. */
+fun slicePath(cx: Float, cy: Float, rIn: Float, rOut: Float, mid: Float, half: Float): androidx.compose.ui.graphics.Path {
+    val deg = (180.0 / Math.PI).toFloat()
+    return androidx.compose.ui.graphics.Path().apply {
+        arcTo(androidx.compose.ui.geometry.Rect(Offset(cx, cy), rOut), (mid - half) * deg, 2 * half * deg, true)
+        arcTo(androidx.compose.ui.geometry.Rect(Offset(cx, cy), maxOf(rIn, 0f)), (mid + half) * deg, -2 * half * deg, false)
+        close()
+    }
 }

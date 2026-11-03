@@ -211,6 +211,16 @@ class MainActivity : ComponentActivity(), Host {
         ActivityOptions.makeClipRevealAnimation(window.decorView, it.left, it.top, it.width(), it.height()).toBundle()
     }
 
+    override fun sendIntent(intent: android.app.PendingIntent, bounds: Rect?): Boolean = runCatching {
+        // Detent is on screen, so the app it hands the tap to may open its activity.
+        val o = bounds?.let { ActivityOptions.makeClipRevealAnimation(window.decorView, it.left, it.top, it.width(), it.height()) }
+            ?: ActivityOptions.makeBasic()
+        if (Build.VERSION.SDK_INT >= 34) {
+            o.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+        }
+        intent.send(this, 0, null, null, null, null, o.toBundle())
+    }.isSuccess
+
     override fun launchApp(app: AppEntry, bounds: Rect?) =
         launcherApps.startMainActivity(app.component, app.user, bounds, reveal(bounds))
 

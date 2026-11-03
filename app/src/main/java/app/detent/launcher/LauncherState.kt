@@ -70,7 +70,10 @@ interface HearEvents {
 
 class Press(val id: Long, val x: Float, val y: Float)
 /** The menu of a held app. [slot] is the quick button that holds the app, or null for the dial. [from] is that button. */
-class QuickMenu(val app: AppEntry, val shortcuts: List<ShortcutInfo>, val slot: Int? = null, val from: Pose? = null)
+class QuickMenu(val app: AppEntry, val shortcuts: List<ShortcutInfo>, val slot: Int? = null, val from: Pose? = null, val panes: PaneSet? = null)
+
+/** The quick panes of a held dial row: [head] on the row itself, [main] on [rows], side panes kept within [lo]..[hi]. */
+class PaneSet(val head: Pane, val main: List<Pane>, val rows: List<Int>, val lo: Float, val hi: Float)
 
 /** An installed app on quick button [slot]. */
 class QuickApp(val slot: Int, val app: AppEntry, val icon: String?)
@@ -101,6 +104,9 @@ interface Host {
     /** Hands [query] to the default browser, or else to the web search app that Android picks. */
     fun searchWeb(query: String, bounds: Rect?)
     fun launchShortcut(info: ShortcutInfo, bounds: Rect?)
+
+    /** Runs a notification's tap or button. False when the app took the intent back. */
+    fun sendIntent(intent: android.app.PendingIntent, bounds: Rect?): Boolean
     fun showAppInfo(app: AppEntry, bounds: Rect?)
     fun isDefaultHome(): Boolean
     fun requestHome()
@@ -174,6 +180,9 @@ private class Drag(val x0: Float, val y0: Float, var y: Float, val t0: Long, val
 
     /** True when the touch caught a turning dial. A tap then only stops the dial. */
     var caught = false
+
+    /** True once a hold opened the quick panes. The same touch then picks a pane. */
+    var panes = false
     val samples = ArrayDeque<Pair<Long, Float>>()
 }
 
@@ -925,7 +934,8 @@ class LauncherState(
         return if (k.roundToInt() == pos.roundToInt()) Zone.Selected else Zone.Dial
     }
 
-    fun onDown(x: Float, y: Float) {
+    fun onDown(x: Float, y: Float, pressure: Float = 1f) {
+        lastPressure = pressure
         if (blocked()) return
         themeJump = null
         val zone = if (ob == null) zoneAt(x, y) else Zone.None
@@ -960,8 +970,13 @@ class LauncherState(
         run()
     }
 
-    fun onMove(x: Float, y: Float) {
+    fun onMove(x: Float, y: Float, pressure: Float = 1f) {
+        lastPressure = pressure
         val d = drag ?: return
+        if (d.panes) {
+            paneMove(x, y, pressure)
+            return
+        }
         if (!d.moved && (abs(y - d.y0) > 6 || abs(x - d.x0) > 6)) {
             d.moved = true
             cancelPress()
@@ -974,6 +989,7 @@ class LauncherState(
         }
         if (d.swipe) {
             swipeDx = x - d.x0
+            swipeEnd = swipeDx
             val armed = abs(swipeDx) >= SWIPE
             if (armed != swipeArmed) {
                 swipeArmed = armed
@@ -1010,6 +1026,10 @@ class LauncherState(
         lift = 0f
         val d = drag ?: return
         drag = null
+        if (d.panes) {
+            paneUp(held = true)
+            return
+        }
         if (kind == Kind.Lens) lsT = .5f
         if (d.scrub) {
             endScrub()
@@ -1022,7 +1042,10 @@ class LauncherState(
             target = pos.roundToInt().toFloat()
             spin = Spin.Settle
             run()
-            if (armed && row != null) swipeAt(row)
+            if (armed && row != null) {
+                // Toward the screen edge opens the quick actions; toward the dial runs the swipe.
+                if (outward(swipeEnd)) openMenuAt(row) else swipeAt(row)
+            }
             return
         }
         val t = SystemClock.uptimeMillis()
@@ -1044,6 +1067,7 @@ class LauncherState(
     fun onCancel() {
         cancelPress()
         clearSwipe()
+        if (drag?.panes == true) paneHeldEnd()
         lift = 0f
         val d = drag ?: return
         drag = null
@@ -1092,13 +1116,19 @@ class LauncherState(
             startScrub()
             return
         }
-        drag = null
         if (kind == Kind.Lens) lsT = .5f
         target = pos.roundToInt().toFloat()
         spin = Spin.Settle
         fb.click(true)
         fb.heavy()
         if (d.zone == Zone.Selected) openMenu() else openSetup()
+        // The quick panes take the rest of this touch: slide to pick, let go to run.
+        if (menu?.panes != null) {
+            d.panes = true
+            paneStart(d.x0, d.y)
+        } else {
+            drag = null
+        }
         run()
     }
 
@@ -1754,13 +1784,30 @@ class LauncherState(
 
     private fun openMenu() {
         val app = curApp() ?: return
-        menu = QuickMenu(app, repo.shortcuts(app))
+        val shortcuts = repo.shortcuts(app, if (kind == Kind.Radial) 6 else 4)
+        menu = QuickMenu(app, shortcuts, panes = if (kind == Kind.Radial) paneSet(app, shortcuts) else null)
         menuShown = true
+        paneHot = null
+        paneDeep = false
+        paneAnchor = null
+        deepPress.reset()
+    }
+
+    /** A swipe toward the screen edge on row [k]: the row turns into the notch and its quick actions open. */
+    private fun openMenuAt(k: Int) {
+        val apps = dialApps
+        if (apps.isEmpty()) return
+        if (mod(k, apps.size) != selIndex(apps.size)) jumpTo(k.toFloat())
+        fb.click(true)
+        openMenu()
     }
 
     fun closeMenu() {
         if (menu == null) return
         menuShown = false
+        paneHot = null
+        paneDeep = false
+        dwellJob?.cancel()
         scope.launch {
             delay(200)
             if (!menuShown) menu = null
@@ -1794,6 +1841,212 @@ class LauncherState(
     }
 
     fun menuRemove() = afterMenu(160) { removeFromDial(it) }
+
+    // Quick panes: the radial quick actions of a held row. See Panes.kt.
+
+    /** The pane under the finger, as column and index (-1 is the header), or null. */
+    var paneHot by mutableStateOf<Pair<Col, Int>?>(null)
+        private set
+
+    /** True while the side panes of the picked pane are out. */
+    var paneDeep by mutableStateOf(false)
+        private set
+
+    /** The main pane that the side panes belong to. */
+    var paneAnchor: Int? = null
+        private set
+    private val deepPress = DeepPress()
+    private var dwellJob: Job? = null
+    private var lastPressure = 1f
+
+    /** True while the hold that opened the panes is still down; then the row alone picks. */
+    private var paneHolding = false
+    private var swipeEnd = 0f
+
+    /** True for a sideways move [dx] away from the dial centre, toward the open side where the panes show. */
+    private fun outward(dx: Float) = (if (left) -dx else dx) < 0f
+
+    /** The panes laid out for a side-column opening of [deep], 0 to 1. */
+    fun paneSlots(deep: Float): List<Slot> {
+        val set = menu?.panes ?: return emptyList()
+        return layoutPanes(set.head, set.main, set.rows, radius, deep, paneAnchor, set.lo, set.hi)
+    }
+
+    private fun paneSet(row: AppEntry, shortcuts: List<ShortcutInfo>): PaneSet {
+        val g = Geo(radius, cy, layout.ax)
+        val (below, above) = roomRows(g.span, g.step, radius, cy, max(200f, clockTop + 40f), buttonY - 40f)
+        val kids = row.kids
+        val main = ArrayList<Pane>()
+        val manage = manageSides(row)
+        if (kids != null) {
+            // A folder: its apps, one pane each.
+            kids.forEach { kid -> main += Pane("kid:${kid.key}", kid.display, "", Tone.Action) { paneLaunch(kid, "") } }
+        } else {
+            if (notifAccess) {
+                Unread.notes.value[row.pkgUser].orEmpty().take(2).forEach { n -> main += notePane(row, n) }
+            }
+            shortcuts.forEach { info ->
+                val label = (info.shortLabel ?: info.longLabel)?.toString()?.lowercase().orEmpty()
+                main += Pane("sc:${info.id}", label, "", Tone.Action, manage.first, manage.second) { menuShortcut(info) }
+            }
+        }
+        val list = main.take(PANE_MAX)
+        val rows = paneRows(list.size, below, above)
+        val hint = when {
+            list.isEmpty() -> "no quick actions · rest for more"
+            else -> "slide to pick · rest or press for more"
+        }
+        val head = Pane("head", row.display, hint, Tone.Head, manage.first, manage.second) { launchSelected() }
+        return PaneSet(head, list.take(rows.size), rows, -above.toFloat(), below.toFloat())
+    }
+
+    /** The side panes of an app or a folder: toward the edge, and over the dial. */
+    private fun manageSides(row: AppEntry): Pair<List<Pane>, List<Pane>> {
+        val inFolder = folderKey != null
+        val out = ArrayList<Pane>()
+        val inn = ArrayList<Pane>()
+        when {
+            inFolder -> {
+                out += Pane("info", "app info", tone = Tone.Setting) { menuInfo() }
+                out += Pane("out", "take out", tone = Tone.Danger) { menuTakeOut() }
+                inn += Pane("move", "move", tone = Tone.Setting) { menuMove() }
+            }
+            row.kids != null -> {
+                out += Pane("ungroup", "ungroup", tone = Tone.Setting) { menuUngroup() }
+                out += Pane("remove", "remove", tone = Tone.Danger) { menuRemove() }
+                inn += Pane("move", "move", tone = Tone.Setting) { menuMove() }
+                inn += Pane("folder", "edit folder", tone = Tone.Setting) { menuFolder() }
+            }
+            else -> {
+                out += Pane("info", "app info", tone = Tone.Setting) { menuInfo() }
+                out += Pane("remove", "remove", tone = Tone.Danger) { menuRemove() }
+                inn += Pane("move", "move", tone = Tone.Setting) { menuMove() }
+                inn += Pane("folder", "make folder", tone = Tone.Setting) { menuFolder() }
+                val sw = swipeTarget(row)
+                inn += Pane("swipe", if (sw != null) "swipe: ${sw.display}" else "set swipe", tone = Tone.Setting) { menuSwipe() }
+            }
+        }
+        return out to inn
+    }
+
+    private fun notePane(row: AppEntry, n: Note): Pane {
+        val title = n.title.ifEmpty { n.text }.lowercase()
+        val sub = if (n.title.isEmpty()) "" else n.text.lowercase()
+        val out = listOf(Pane("clear:${n.key}", "clear", tone = Tone.Danger) { paneClear(n) })
+        val inn = n.actions.mapIndexed { i, a ->
+            Pane("na:${n.key}:$i", a.title.lowercase(), tone = Tone.Setting) { paneNoteAction(a) }
+        } + listOfNotNull(n.intent?.let { pi -> Pane("open:${n.key}", "open", tone = Tone.Setting) { paneNoteOpen(row, title, pi) } })
+        return Pane("note:${n.key}", title, sub, Tone.Note, out, inn) { n.intent?.let { paneNoteOpen(row, title, it) } ?: paneLaunch(row.target, "") }
+    }
+
+    private fun paneLaunch(app: AppEntry, sub: String) = afterMenu(120) { row ->
+        openApp(app.display, row.key, app.pkgUser, selectedPose() ?: return@afterMenu, sub, true) { host.launchApp(app, it) }
+    }
+
+    private fun paneNoteOpen(row: AppEntry, title: String, pi: android.app.PendingIntent) = afterMenu(120) { _ ->
+        val app = row.target
+        openApp(app.display, row.key, app.pkgUser, selectedPose() ?: return@afterMenu, title, true) {
+            if (!host.sendIntent(pi, it)) host.launchApp(app, it)
+        }
+    }
+
+    private fun paneNoteAction(a: NoteAction) = afterMenu(120) { _ ->
+        if (host.sendIntent(a.intent, null)) showToast(a.title.lowercase()) else {
+            fb.refuse()
+            showToast("${a.title.lowercase()} is gone")
+        }
+    }
+
+    private fun paneClear(n: Note) = afterMenu(120) { _ ->
+        if (Unread.dismiss(n.key)) {
+            fb.off()
+            showToast("cleared")
+        } else {
+            fb.refuse()
+            showToast("can't clear it")
+        }
+    }
+
+    private fun paneTouch(x: Float, y: Float, pressure: Float) {
+        val g = Geo(radius, cy, layout.ax)
+        val p = polar(mirX(x), y, g.cx, cy, g.step)
+        val hit = pickSlot(paneSlots(if (paneDeep) 1f else 0f), p, paneDeep, strict = !paneHolding)
+        // A finger at rest sends no moves; look again once the dwell is up.
+        dwellJob?.cancel()
+        if (!paneDeep && hit != null) dwellJob = scope.launch {
+            delay(720)
+            if (menuShown) paneTouch(x, y, lastPressure)
+        }
+        val key = hit?.let { it.col to it.index }
+        if (key != paneHot) {
+            paneHot = key
+            if (key != null) fb.hover()
+            // Back on another main pane: its own side panes, not the old ones.
+            if (paneDeep && hit?.col == Col.Main && hit.index != paneAnchor) {
+                paneDeep = false
+                paneAnchor = null
+                deepPress.reset()
+            }
+        }
+        if (!paneDeep && hit != null && hit.col == Col.Main &&
+            deepPress.feed(SystemClock.uptimeMillis(), x, y, pressure, key) &&
+            (hit.pane.out.isNotEmpty() || hit.pane.inn.isNotEmpty())
+        ) {
+            paneAnchor = hit.index
+            paneDeep = true
+            fb.pop()
+        }
+    }
+
+    /** The hold that opened the panes is still down at ([x], [y]). */
+    private fun paneStart(x: Float, y: Float) {
+        paneHolding = true
+        deepPress.reset()
+        paneTouch(x, y, lastPressure)
+    }
+
+    private fun paneMove(x: Float, y: Float, pressure: Float) = paneTouch(x, y, pressure)
+
+    /** The finger left the panes. After the opening hold, letting go on the header keeps them open. */
+    private fun paneUp(held: Boolean) {
+        dwellJob?.cancel()
+        paneHolding = false
+        val hot = paneHot
+        val slot = hot?.let { h -> paneSlots(if (paneDeep) 1f else 0f).firstOrNull { it.col == h.first && it.index == h.second } }
+        deepPress.reset()
+        when {
+            slot == null -> if (held) paneHot = null else closeMenu()
+            slot.col == Col.Main && slot.index == -1 && held -> paneHot = null
+            else -> {
+                val act = slot.pane.act
+                if (act == null) closeMenu() else act()
+            }
+        }
+    }
+
+    private fun paneHeldEnd() {
+        dwellJob?.cancel()
+        paneHolding = false
+        deepPress.reset()
+        paneHot = null
+    }
+
+    /** Touches on the open panes, in design units. A touch away from every pane closes them on release. */
+    fun paneDown(x: Float, y: Float, pressure: Float) {
+        if (menu?.panes == null || !menuShown) return
+        deepPress.reset()
+        paneTouch(x, y, pressure)
+    }
+
+    fun paneDrag(x: Float, y: Float, pressure: Float) {
+        if (menu?.panes == null || !menuShown) return
+        paneTouch(x, y, pressure)
+    }
+
+    fun paneRelease() {
+        if (menu?.panes == null || !menuShown) return
+        paneUp(held = false)
+    }
 
     // Folders, swipes and the order of the rows.
 

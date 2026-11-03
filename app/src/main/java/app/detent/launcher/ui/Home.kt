@@ -219,6 +219,7 @@ private fun Home(s: LauncherState) {
         }
         ModePill(s, pal)
         QuickMenuView(s, pal)
+        QuickPanes(s, pal)
         SearchSheet(s, pal)
         StatusStrip(s, pal, status)
         AppSheet(s, pal)
@@ -372,7 +373,7 @@ private fun GestureLayer(s: LauncherState) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val kk = k
-                    s.onDown(down.position.x / kk, down.position.y / kk)
+                    s.onDown(down.position.x / kk, down.position.y / kk, down.pressure)
                     var ended = false
                     try {
                         while (true) {
@@ -384,7 +385,7 @@ private fun GestureLayer(s: LauncherState) {
                                 break
                             }
                             if (ch.positionChanged()) {
-                                s.onMove(ch.position.x / kk, ch.position.y / kk)
+                                s.onMove(ch.position.x / kk, ch.position.y / kk, ch.pressure)
                                 ch.consume()
                             }
                         }
@@ -845,6 +846,8 @@ private fun QuickMenuView(s: LauncherState, pal: Palette) {
     s.menu?.let { last = it }
     if (s.menu == null) return
     val m = last ?: return
+    // The radial dials show quick panes instead; see QuickPanes.
+    if (m.panes != null) return
     val veil by animateFloatAsState(if (s.menuShown) 1f else 0f, tween(200), label = "menuVeil")
     val op by animateFloatAsState(if (s.menuShown) 1f else 0f, tween(180), label = "menuAlpha")
     val t by animateFloatAsState(if (s.menuShown) 1f else 0f, tween(220, easing = Ease), label = "menuMove")
