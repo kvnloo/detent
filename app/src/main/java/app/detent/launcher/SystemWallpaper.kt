@@ -73,7 +73,8 @@ object SystemWallpaper {
                 left && theme.wallLeft != null -> theme.wallLeft
                 else -> theme.wall
             }
-            ctx.assets.open(path!!).use { BitmapFactory.decodeStream(it) }
+            if (path!!.startsWith("/")) BitmapFactory.decodeFile(path) ?: error("can't read wallpaper")
+            else ctx.assets.open(path).use { BitmapFactory.decodeStream(it) }
         }
         val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
         if (hand) paint.colorFilter = ColorMatrixColorFilter(handMatrix(pal))

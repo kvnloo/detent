@@ -39,7 +39,7 @@ adb install detent.apk
 | Tap a quick button | Its app opens. If the corner has no quick app yet, pick one. |
 | Hold a quick button | A menu shows the app shortcuts, `change icon`, `change app`, `add a quick app`, and `remove quick app`. |
 | Tap the mic button and say an app name | The dial swells with your voice, and your words show at the top. When the words name one app, the dial turns to it and the app opens. If not, search opens with the words. |
-| Tap the web button and type | Press `Enter` or tap `search`. Your default browser searches the web with its own search engine. If the browser takes no web search, Android gives the words to a search app, such as Google, or asks you to pick one. Detent has no internet permission. It only hands the words over. |
+| Tap the web button and type | Press `Enter` or tap `search`. Your default browser searches the web with its own search engine. If the browser takes no web search, Android gives the words to a search app, such as Google, or asks you to pick one. Detent only hands the words over; it does not run web searches itself. |
 | Drag down from the top of the screen | The notifications open. The drag starts above the clock. |
 
 The quick buttons sit in the bottom corner on the dial side. They hold up to 3 apps that you need fast, such as the camera. Each button shows an icon that you pick, and Detent marks the icon that fits the app. With 1 quick app, the button can show the app name. With 2 or 3, a button without an icon shows the first letter of the name. The web button sits next to the quick buttons, and the mic button sits at the screen edge. To hide the mic button or the web button, turn off `voice` or `web search` on the `feel` step.
@@ -81,7 +81,13 @@ On the grid layouts, an app opens with a ripple of dots from the notch.
 
 The dial can sit on the right or the left edge.
 
-Detent has 28 themes. The 4 phone themes are dusk, ember, signal, and paper. They use a tinted dot-hand art. The 23 Omarchy themes each bring their own wallpaper. The `hyprland` synced theme uses desktop colours and keeps the system wallpaper. On the theme step, the colours change on each click of the dial. The wallpaper loads when the dial stops.
+Detent has 28 themes. The 4 phone themes are dusk, ember, signal, and paper. They use a tinted dot-hand art. The 23 Omarchy themes each bring their own wallpaper. The `hyprland` synced theme uses desktop colours and keeps the system wallpaper. On the theme step, the colours change on each click of the dial. Wallpapers reveal in the direction of the swipe while browsing; distant taps crossfade directly to their destination.
+
+### Import a collection
+
+In setup → theme, tap `import +`, paste a public collection link, then tap `find themes`. Review and select up to 20 entries, import, and tap `view imported` to browse them. You can also share a link to Detent from your browser. Imports are saved offline and re-importing does not duplicate them. Your current wallpaper is not replaced until you finish choosing a theme.
+
+GitHub repositories/folders, image galleries, direct images and JSON collections are supported. For example, `https://github.com/kvnloo/.files` discovers the background images and the Wallpaper Engine favorites in `config/wallpapers/live.json`. Workshop links are saved as links: Steam content and phone packages stored only on the author's PC cannot be downloaded from GitHub. See [theme collections](docs/THEME-COLLECTIONS.md) for the manifest format and limits.
 
 ### Synced theme (`hyprland`)
 
@@ -136,7 +142,7 @@ If Android shows "Restricted setting" when you allow notification access, open t
 
 ## Permissions
 
-Detent does not have the internet permission. It does not send data anywhere.
+Detent uses the internet only when you explicitly scan or import a theme collection. It contacts GitHub/the linked hosts, which see your IP address and requested URLs. It does not upload your apps, photos or settings, run repository code, or read your clipboard automatically. Imported images and palettes stay on the phone.
 
 The mic button uses the speech service of your phone, such as Speech Services by Google. That service turns your voice into text and gives Detent only the text. The service is a separate app with its own permissions.
 
@@ -144,6 +150,7 @@ The mic button uses the speech service of your phone, such as Speech Services by
 | --- | --- |
 | `QUERY_ALL_PACKAGES` | To list all the apps you can open and to find your default apps for the first dial. |
 | `VIBRATE` | For haptics. |
+| `INTERNET` | To scan and download theme collections you explicitly request. |
 | `SET_WALLPAPER` | For the `lock screen` switch. |
 | `EXPAND_STATUS_BAR` | To open the notifications when you drag down from the top of the home screen. |
 | `ACCESS_NETWORK_STATE` | For the wifi signal in the `detent bar`. Detent reads only the signal strength. |

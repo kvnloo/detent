@@ -98,7 +98,7 @@ interface Host {
     /** True when an app on the phone can search the web. */
     fun canSearchWeb(): Boolean
 
-    /** Hands [query] to the default browser, or else to the web search app that Android picks. Detent has no internet permission. */
+    /** Hands [query] to the default browser, or else to the web search app that Android picks. */
     fun searchWeb(query: String, bounds: Rect?)
     fun launchShortcut(info: ShortcutInfo, bounds: Rect?)
     fun showAppInfo(app: AppEntry, bounds: Rect?)
@@ -205,6 +205,14 @@ class LauncherState(
     var spin by mutableStateOf(Spin.Idle)
         private set
     val index by derivedStateOf { pos.roundToInt() }
+
+    /** A distant theme tap previews its destination, not every row the dial settles through. */
+    var themeJump by mutableStateOf<Int?>(null)
+        private set
+
+    private fun themeTap(row: Int) {
+        if (ob == Step.THEME) themeJump = row.takeIf { abs(it - index) > 1 }
+    }
 
     /** How far the lens bulges, from 0.5 at rest to 1 under the finger. */
     var ls by mutableFloatStateOf(.5f)
@@ -595,6 +603,7 @@ class LauncherState(
 
     fun back() {
         when {
+            themeImportLink != null -> closeThemeImport()
             open != null -> close()
             hear != null -> closeVoice()
             menu != null -> closeMenu()
@@ -710,6 +719,7 @@ class LauncherState(
     }
 
     private fun stepBy(n: Int) {
+        themeJump = null
         val base = if (spin == Spin.Settle) target else pos.roundToInt().toFloat()
         if (kind == Kind.Lens) pulseLens()
         target = base + n
@@ -838,7 +848,7 @@ class LauncherState(
         private set
 
     private fun blocked() =
-        open != null || search || hear != null || menu != null || ob == Step.WELCOME || ob == Step.APPS
+        themeImportLink != null || open != null || search || hear != null || menu != null || ob == Step.WELCOME || ob == Step.APPS
 
     private fun mirX(x: Float) = if (left) W - x else x
 
@@ -866,6 +876,7 @@ class LauncherState(
 
     fun onDown(x: Float, y: Float) {
         if (blocked()) return
+        themeJump = null
         val zone = if (ob == null) zoneAt(x, y) else Zone.None
         val edge = when {
             ob != null || carry != null -> Edge.None
@@ -997,6 +1008,7 @@ class LauncherState(
 
     fun onWheel(dy: Float) {
         if (blocked() || scrub != null) return
+        themeJump = null
         pos += dy.coerceIn(-140f, 140f) / 90f
         if (kind == Kind.Lens) {
             lsJob?.cancel()
@@ -1051,6 +1063,7 @@ class LauncherState(
                 named && ob == null -> launchAt(k)
                 else -> {
                     fb.tick()
+                    themeTap(k)
                     target = k.toFloat()
                     spin = Spin.Settle
                 }
@@ -1081,6 +1094,7 @@ class LauncherState(
             if (k == cur) launchSelected() else launchAt(k)
         } else if (k != cur) {
             fb.tick()
+            themeTap(k)
             target = k.toFloat()
             spin = Spin.Settle
         }
@@ -1125,6 +1139,22 @@ class LauncherState(
         run()
     }
 
+    var themeImportLink by mutableStateOf<String?>(null)
+        private set
+
+    fun openThemeImport(link: String = "") {
+        if (ob == null || ob == Step.WELCOME || ob == Step.READY) openSetup()
+        if (ob != Step.THEME) goTo(Step.THEME)
+        themeImportLink = link
+    }
+
+    fun closeThemeImport() { themeImportLink = null }
+
+    fun showImportedThemes() {
+        themeImportLink = null
+        if (THEMES.any { it.group == ImportedThemes.GROUP }) jumpGroup(ImportedThemes.GROUP)
+    }
+
     // Onboarding and the setup editor.
 
     private fun tap() {
@@ -1161,11 +1191,13 @@ class LauncherState(
     private fun goTo(n: Int?) {
         val cur = ob
         if (cur == Step.THEME && n != Step.THEME) {
-            cfg = cfg.copy(theme = mod(pos.roundToInt(), THEMES.size))
+            cfg = cfg.copy(theme = mod(themeJump ?: pos.roundToInt(), THEMES.size))
+            themeJump = null
             jumpTo(appPos.toFloat())
         }
         if (n == Step.THEME && cur != Step.THEME) {
             appPos = pos.roundToInt()
+            themeJump = null
             jumpTo(cfg.theme.toFloat())
         }
         ob = n
@@ -1184,8 +1216,9 @@ class LauncherState(
     /** A live theme asks its wallpaper app to switch, once per change of theme. */
     private fun syncLive() {
         val t = THEMES[cfg.theme]
-        if (t.group != Synced.LIVE_GROUP || prefs.appliedLive == t.name) return
-        if (host.openLiveWallpaper(t)) prefs.appliedLive = t.name
+        val key = t.importId ?: t.name
+        if ((t.group != Synced.LIVE_GROUP && t.liveSource == null && t.mobilePackage == null) || prefs.appliedLive == key) return
+        if (host.openLiveWallpaper(t) && (t.group == Synced.LIVE_GROUP || t.mobilePackage != null)) prefs.appliedLive = key
     }
 
     /** Copies the theme to the lock screen when the theme or the side changed since the last copy. */
@@ -1379,6 +1412,7 @@ class LauncherState(
         if (d > n / 2f) d -= n
         if (d < -n / 2f) d += n
         fb.tap()
+        themeTap(base + d)
         target = (base + d).toFloat()
         spin = Spin.Settle
         run()

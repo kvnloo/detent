@@ -76,5 +76,9 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.animation)
 
+    implementation("org.jsoup:jsoup:1.18.3")
+
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
+    testImplementation("org.robolectric:robolectric:4.14.1")
 }

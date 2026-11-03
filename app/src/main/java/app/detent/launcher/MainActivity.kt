@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity(), Host {
             override fun handleOnBackPressed() = state.back()
         })
         setContent { DetentRoot(state) }
+        receiveThemeLink(intent)
     }
 
     override fun onResume() {
@@ -117,6 +118,18 @@ class MainActivity : ComponentActivity(), Host {
         val home = intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)
         val alreadyHome = hasWindowFocus() && intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT == 0
         if (home && alreadyHome) state.onHome()
+        receiveThemeLink(intent)
+    }
+
+    private fun receiveThemeLink(incoming: Intent) {
+        val text = when {
+            incoming.action == Intent.ACTION_SEND && incoming.type == "text/plain" -> incoming.getStringExtra(Intent.EXTRA_TEXT)
+            incoming.action == Intent.ACTION_VIEW && incoming.data?.scheme == "detent" && incoming.data?.host == "import" -> incoming.data?.getQueryParameter("url")
+            else -> null
+        } ?: return
+        val link = sharedThemeUrl(text) ?: return
+        state.openThemeImport(link)
+        setIntent(Intent(Intent.ACTION_MAIN))
     }
 
     override fun assistants(): List<Pair<String, String>> = packageManager
@@ -136,7 +149,9 @@ class MainActivity : ComponentActivity(), Host {
     }
 
     override fun openLiveWallpaper(theme: ThemeDef): Boolean {
-        val f = Synced.liveFile(applicationContext, theme) ?: return false
+        val f = theme.mobilePackage?.let { java.io.File(it) }
+            ?: if (theme.group == Synced.LIVE_GROUP) Synced.liveFile(applicationContext, theme) else null
+        if (f == null) return theme.liveSource?.let { open(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } ?: false
         val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.live", f)
         val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/octet-stream")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
