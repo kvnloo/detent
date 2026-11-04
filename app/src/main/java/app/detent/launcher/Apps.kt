@@ -139,7 +139,7 @@ class AppsRepository(private val ctx: Context) {
     }
 
     /** Manifest and dynamic shortcuts. Android returns them only to the default home app. */
-    fun shortcuts(app: AppEntry): List<ShortcutInfo> = try {
+    fun shortcuts(app: AppEntry, max: Int = 4): List<ShortcutInfo> = try {
         if (!la.hasShortcutHostPermission()) emptyList()
         else {
             val q = LauncherApps.ShortcutQuery()
@@ -149,7 +149,7 @@ class AppsRepository(private val ctx: Context) {
             la.getShortcuts(q, app.user).orEmpty()
                 .filter { it.isEnabled }
                 .sortedWith(compareBy({ if (it.isDeclaredInManifest) 0 else 1 }, { it.rank }))
-                .take(4)
+                .take(max)
         }
     } catch (e: Exception) {
         emptyList()
