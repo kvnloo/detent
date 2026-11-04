@@ -99,7 +99,9 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
     }
     val smoke = if (pal.light) mix(pal.bg, Color.White, .4f).copy(alpha = .5f) else mix(pal.bg, Color.Black, .6f).copy(alpha = .36f)
     val rim = Color.White.copy(alpha = if (pal.light) .6f else .3f)
-    val solid = mix(Color.White, pal.accent, .92f).copy(alpha = .93f)
+    // The picked pill inverts the glass: bright with dark ink on dark themes, the theme's ink with light text on light ones.
+    val solid = if (pal.light) pal.fg.copy(alpha = .92f) else mix(Color.White, pal.accent, .92f).copy(alpha = .93f)
+    val hotInk = if (pal.light) pal.bg else ink
     val dangerSolid = Color(0xFFD9443F).copy(alpha = .93f)
 
     Canvas(
@@ -157,7 +159,7 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
             val band = if (slot.col == Col.Out) maxOf(slot.rOut, minOf(edge, slot.rOut + 90f)) - slot.rIn else slot.rOut - slot.rIn
             val maxText = ((band - hw * 2.2f) * kk).toInt().coerceAtLeast(1)
             val textColor = when {
-                isHot -> if (bad) Color.White else ink
+                isHot -> if (bad) Color.White else hotInk
                 bad -> danger
                 else -> onGlass
             }
@@ -213,7 +215,7 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
                 if (dwellOn) {
                     val y = 8.5f * kk
                     val w = maxOf(main.size.width.toFloat(), 18f * kk) * dwell.value
-                    drawLine(if (isHot) ink.copy(alpha = .7f) else onGlass.copy(alpha = .85f), Offset(0f, y), Offset(w, y),
+                    drawLine(if (isHot) hotInk.copy(alpha = .7f) else onGlass.copy(alpha = .85f), Offset(0f, y), Offset(w, y),
                         strokeWidth = 1.4f * kk, cap = StrokeCap.Round, alpha = ta)
                 }
             }
