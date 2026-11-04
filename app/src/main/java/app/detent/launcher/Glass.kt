@@ -217,8 +217,7 @@ half4 main(float2 p) {
 class GlassFx {
     private val shader: RuntimeShader? = if (Build.VERSION.SDK_INT >= 33) RuntimeShader(SRC) else null
     private val brush = shader?.let { ShaderBrush(it) }
-    private val lenser: RuntimeShader? = if (Build.VERSION.SDK_INT >= 33) RuntimeShader(LENS_SRC) else null
-    private val lensBrush = lenser?.let { ShaderBrush(it) }
+    private val lenser: LensShader? = if (Build.VERSION.SDK_INT >= 33) LensShader() else null
 
     /**
      * A glass lens along the ring round ([cx], [cy]) between radii [rIn] and [rOut], centred on the screen angle
@@ -232,8 +231,7 @@ class GlassFx {
         if (rOut - rIn < 2f) return
         val outline = lensOutline(cx, cy, rIn, rOut, mid, half)
         val sh = lenser
-        val br = lensBrush
-        if (sh == null || br == null) {
+        if (sh == null || Build.VERSION.SDK_INT < 33) {
             val path = androidx.compose.ui.graphics.Path().apply {
                 moveTo(outline[0].x, outline[0].y)
                 for (i in 1 until outline.size) lineTo(outline[i].x, outline[i].y)
@@ -243,21 +241,7 @@ class GlassFx {
             drawPath(path, rimColor, style = androidx.compose.ui.graphics.drawscope.Stroke(k))
             return
         }
-        sh.setFloatUniform("c", cx, cy)
-        sh.setFloatUniform("rIn", rIn)
-        sh.setFloatUniform("rOut", rOut)
-        sh.setFloatUniform("mid", mid)
-        sh.setFloatUniform("span", half)
-        sh.setFloatUniform("pw", LENS_POWER)
-        sh.setFloatUniform("tint", tint.red, tint.green, tint.blue, tint.alpha)
-        sh.setFloatUniform("accent", accent.red, accent.green, accent.blue, accent.alpha)
-        sh.setFloatUniform("glow", glow)
-        sh.setFloatUniform("fresnel", g.fresnel)
-        sh.setFloatUniform("specular", g.specular)
-        sh.setFloatUniform("bevel", g.bevel)
-        sh.setFloatUniform("noise", g.noise)
-        sh.setFloatUniform("chroma", g.chroma)
-        sh.setFloatUniform("bw", maxOf(2f * k, minOf(rOut - rIn, 2f * rOut * half) * .2f))
+        val br = sh.brush(cx, cy, rIn, rOut, mid, half, tint, accent, glow, g, maxOf(2f * k, minOf(rOut - rIn, 2f * rOut * half) * .2f))
         // Only the box round the lens runs the shader.
         val x0 = outline.minOf { it.x } - 4
         val y0 = outline.minOf { it.y } - 4
@@ -288,6 +272,35 @@ class GlassFx {
     /** A glass bead: a disc of radius [r] (px). */
     fun DrawScope.bead(cx: Float, cy: Float, r: Float, tint: Color, g: GlassLook, k: Float) =
         band(cx, cy, -100000f, r, tint, g, k)
+}
+
+/** The lens shader and its brush. Android 13 and up only; [GlassFx.lens] draws the plain outline below that. */
+@androidx.annotation.RequiresApi(33)
+private class LensShader {
+    private val shader = RuntimeShader(LENS_SRC)
+    private val brush = ShaderBrush(shader)
+
+    fun brush(
+        cx: Float, cy: Float, rIn: Float, rOut: Float, mid: Float, half: Float,
+        tint: Color, accent: Color, glow: Float, g: GlassLook, bw: Float,
+    ): ShaderBrush {
+        shader.setFloatUniform("c", cx, cy)
+        shader.setFloatUniform("rIn", rIn)
+        shader.setFloatUniform("rOut", rOut)
+        shader.setFloatUniform("mid", mid)
+        shader.setFloatUniform("span", half)
+        shader.setFloatUniform("pw", LENS_POWER)
+        shader.setFloatUniform("tint", tint.red, tint.green, tint.blue, tint.alpha)
+        shader.setFloatUniform("accent", accent.red, accent.green, accent.blue, accent.alpha)
+        shader.setFloatUniform("glow", glow)
+        shader.setFloatUniform("fresnel", g.fresnel)
+        shader.setFloatUniform("specular", g.specular)
+        shader.setFloatUniform("bevel", g.bevel)
+        shader.setFloatUniform("noise", g.noise)
+        shader.setFloatUniform("chroma", g.chroma)
+        shader.setFloatUniform("bw", bw)
+        return brush
+    }
 }
 
 /**
