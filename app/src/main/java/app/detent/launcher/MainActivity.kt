@@ -138,6 +138,8 @@ class MainActivity : ComponentActivity(), Host {
         super.onResume()
         state.onResume()
         state.syncGlass()
+        TailnetSync.follow = { theme, device -> state.followTheme(theme, device) }
+        TailnetSync.start(applicationContext)
     }
 
     override fun onPause() {
@@ -148,6 +150,7 @@ class MainActivity : ComponentActivity(), Host {
     override fun onStop() {
         super.onStop()
         state.onStop()
+        TailnetSync.stop()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -159,6 +162,14 @@ class MainActivity : ComponentActivity(), Host {
     }
 
     private fun receiveThemeLink(incoming: Intent) {
+        if (incoming.action == Intent.ACTION_VIEW && incoming.data?.scheme == "detent" && incoming.data?.host == "sync") {
+            val n = TailnetSync.setHosts(applicationContext, incoming.data?.getQueryParameters("host").orEmpty())
+            state.showToast(if (n > 0) "syncing with $n machine${if (n == 1) "" else "s"} on your tailnet" else "no tailnet address in that link")
+            TailnetSync.stop()
+            TailnetSync.start(applicationContext)
+            setIntent(Intent(Intent.ACTION_MAIN))
+            return
+        }
         val text = when {
             incoming.action == Intent.ACTION_SEND && incoming.type == "text/plain" -> incoming.getStringExtra(Intent.EXTRA_TEXT)
             incoming.action == Intent.ACTION_VIEW && incoming.data?.scheme == "detent" && incoming.data?.host == "import" -> incoming.data?.getQueryParameter("url")
@@ -188,12 +199,41 @@ class MainActivity : ComponentActivity(), Host {
     override fun openLiveWallpaper(theme: ThemeDef): Boolean {
         val f = theme.mobilePackage?.let { java.io.File(it) }
             ?: if (theme.group == Synced.LIVE_GROUP) Synced.liveFile(applicationContext, theme) else null
+        // With the wallpaper switch on, Detent applies the scene itself: no tap inside Wallpaper Engine.
+        val title = if (theme.group == Synced.LIVE_GROUP) Synced.liveTitle(theme) else null
+        if (title != null && WallpaperSwitch.enabled(this)) {
+            val we = packageManager.getLaunchIntentForPackage(WallpaperSwitch.WE_PACKAGE)
+                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            val importIt: (() -> Boolean)? = f?.let { file -> { openPackage(file) } }
+            if (we != null && WallpaperSwitch.request(title, theme.preview, importIt) { ok ->
+                    if (!ok) state.showToast("tap ✓ in wallpaper engine to finish")
+                } && open(we)) return true
+        }
         if (f == null) return theme.liveSource?.let { open(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } ?: false
+        return openPackage(f)
+    }
+
+    private fun openPackage(f: java.io.File): Boolean {
         val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.live", f)
         val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/octet-stream")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            .setPackage("io.wallpaperengine.weclient")
+            .setPackage(WallpaperSwitch.WE_PACKAGE)
         return open(view) || open(view.setPackage(null))
+    }
+
+    override fun liveWallpaperPackage(): String? =
+        runCatching { android.app.WallpaperManager.getInstance(this).wallpaperInfo?.packageName }.getOrNull()
+
+    override fun wallpaperSwitchOn() = WallpaperSwitch.enabled(this)
+
+    override fun publishTheme(theme: String) = TailnetSync.publish(this, theme)
+
+    override fun openWallpaperSwitchSettings() {
+        val cn = ComponentName(this, WallpaperSwitch::class.java).flattenToString()
+        val detail = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, cn)
+            .putExtra(":settings:fragment_args_key", cn)
+        if (!open(detail.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))) open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
 
     private val redraw: () -> Unit = { runOnUiThread { recreate() } }

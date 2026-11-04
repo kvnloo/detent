@@ -2,4 +2,7 @@
 <resources>
     <string name="app_name">Detent</string>
     <string name="unread_service_label">Detent unread dots</string>
+    <string name="wallpaper_switch_label">Detent wallpaper switch</string>
+    <string name="wallpaper_switch_summary">Applies a live theme\'s scene in Wallpaper Engine for you</string>
+    <string name="wallpaper_switch_description">When you choose a live theme in Detent, this opens Wallpaper Engine, picks that theme\'s scene and taps its check mark, then returns home. It acts only for a few seconds after you choose a theme, and only inside Wallpaper Engine and Android\'s wallpaper preview. It reads nothing else on the screen.</string>
 </resources>
