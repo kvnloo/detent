@@ -427,6 +427,14 @@ class LauncherState(
      * The row whose name or mark is under ([x], [y]), or null. A row's target is its own angular slot
      * (half a row each side) between the far end of its name and just outside the rim.
      */
+    /** The dial row whose name is under ([x], [y]), or null on the rim, the ticks or empty space. */
+    internal fun nameRowAt(x: Float, y: Float): Int? {
+        val k = dialHit(x, y) ?: return null
+        val g = Geo(radius, cy, layout.ax)
+        val dist = hypot(g.cx - mirX(x), y - cy)
+        return if (dist <= labelRadius(g, layout.markers) + 4f) k else null
+    }
+
     internal fun dialHit(x: Float, y: Float): Int? {
         val g = Geo(radius, cy, layout.ax)
         val dx = g.cx - mirX(x)
@@ -1113,15 +1121,22 @@ class LauncherState(
         if (d.moved || carry != null) return
         press = null
         if (d.zone == Zone.Dial) {
-            startScrub()
-            return
+            // Holding another app's name acts on that app: it turns into the notch and its panes open.
+            // Holding the bare rim or ticks keeps the letter jump.
+            val named = if (kind == Kind.Radial) nameRowAt(d.x0, d.y0) else null
+            if (named == null) {
+                startScrub()
+                return
+            }
+            jumpTo(named.toFloat())
+            followReadout()
         }
         if (kind == Kind.Lens) lsT = .5f
         target = pos.roundToInt().toFloat()
         spin = Spin.Settle
         fb.click(true)
         fb.heavy()
-        if (d.zone == Zone.Selected) openMenu() else openSetup()
+        if (d.zone == Zone.Selected || d.zone == Zone.Dial) openMenu() else openSetup()
         // The quick panes take the rest of this touch: slide to pick, let go to run.
         if (menu?.panes != null) {
             d.panes = true
@@ -1807,6 +1822,7 @@ class LauncherState(
         menuShown = false
         paneHot = null
         paneDeep = false
+        paneDwell = null
         dwellJob?.cancel()
         scope.launch {
             delay(200)
@@ -1863,6 +1879,13 @@ class LauncherState(
     private var paneHolding = false
     private var paneDeepX = 0f
     private var paneSideArmed = false
+
+    /** True when the press-harder happened during the touch that is down now. */
+    private var paneDeepTouch = false
+
+    /** The pane whose press-harder ring is filling, or null. */
+    var paneDwell by mutableStateOf<Pair<Col, Int>?>(null)
+        private set
     private var swipeEnd = 0f
 
     /** True for a sideways move [dx] away from the dial centre, toward the open side where the panes show. */
@@ -1980,18 +2003,22 @@ class LauncherState(
         // A finger at rest sends no moves; look again once the dwell is up.
         dwellJob?.cancel()
         if (!paneDeep && hit != null) dwellJob = scope.launch {
-            delay(720)
+            delay(PANE_DWELL + 20)
             if (menuShown) paneTouch(x, y, lastPressure)
         }
         val key = hit?.let { it.col to it.index }
         if (key != paneHot) {
             paneHot = key
+            // The press-harder ring fills on a main pane that has side options.
+            paneDwell = if (!paneDeep && hit != null && hit.col == Col.Main &&
+                (hit.pane.out.isNotEmpty() || hit.pane.inn.isNotEmpty())) key else null
             if (key != null) fb.hover()
             // Back on another main pane: its own side panes, not the old ones.
             if (paneDeep && hit?.col == Col.Main && hit.index != paneAnchor) {
                 paneDeep = false
                 paneAnchor = null
                 deepPress.reset()
+                paneDwell = key.takeIf { hit.pane.out.isNotEmpty() || hit.pane.inn.isNotEmpty() }
             }
         }
         if (!paneDeep && hit != null && hit.col == Col.Main &&
@@ -2001,6 +2028,8 @@ class LauncherState(
             paneAnchor = hit.index
             paneDeepX = x
             paneSideArmed = false
+            paneDeepTouch = true
+            paneDwell = null
             paneDeep = true
             fb.pop()
         }
@@ -2022,8 +2051,13 @@ class LauncherState(
         val hot = paneHot
         val slot = hot?.let { h -> paneSlots(if (paneDeep) 1f else 0f).firstOrNull { it.col == h.first && it.index == h.second } }
         deepPress.reset()
+        val pressedHere = paneDeepTouch
+        paneDeepTouch = false
+        paneDwell = null
         when {
             slot == null -> if (held) paneHot = null else closeMenu()
+            // Let go on the action that was pressed harder: its side options stay open to tap.
+            paneDeep && pressedHere && slot.col == Col.Main && slot.index == paneAnchor -> paneHot = null
             slot.col == Col.Main && slot.index == -1 && held -> paneHot = null
             else -> {
                 val act = slot.pane.act
@@ -2035,6 +2069,8 @@ class LauncherState(
     private fun paneHeldEnd() {
         dwellJob?.cancel()
         paneHolding = false
+        paneDeepTouch = false
+        paneDwell = null
         deepPress.reset()
         paneHot = null
     }
@@ -2043,6 +2079,8 @@ class LauncherState(
     fun paneDown(x: Float, y: Float, pressure: Float) {
         if (menu?.panes == null || !menuShown) return
         deepPress.reset()
+        // A fresh touch on open side options picks them by place, not by sliding out of the anchor.
+        paneSideArmed = true
         paneTouch(x, y, pressure)
     }
 

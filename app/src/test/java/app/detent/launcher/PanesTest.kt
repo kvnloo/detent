@@ -96,4 +96,26 @@ class PanesTest {
         assertFalse(d.feed(0, 0f, 0f, 1f, null))
         assertFalse(d.feed(2000, 0f, 0f, 1f, null))
     }
+
+    @Test
+    fun lensIsFullerTowardTheOuterEnd() {
+        assertTrue(lensHalf(1f) > lensHalf(0f))
+        assertTrue(lensHalf(0f) > lensHalf(-1f))
+        assertEquals(lensHalf(1f), lensHalf(5f), 0f)
+        assertTrue(lensHalf(1f) <= 1f)
+    }
+
+    @Test
+    fun lensOutlineStaysInsideItsBandAndAngle() {
+        val pts = lensOutline(0f, 0f, 300f, 400f, 0f, .1f)
+        assertEquals(48, pts.size)
+        for (p in pts) {
+            val r = kotlin.math.hypot(p.x, p.y)
+            assertTrue("r=$r", r in 299.5f..400.5f)
+            assertTrue(kotlin.math.abs(kotlin.math.atan2(p.y, p.x)) <= .1f + 1e-4f)
+        }
+        // Touches both radial ends.
+        assertEquals(300f, pts.minOf { kotlin.math.hypot(it.x, it.y) }, .5f)
+        assertEquals(400f, pts.maxOf { kotlin.math.hypot(it.x, it.y) }, .5f)
+    }
 }

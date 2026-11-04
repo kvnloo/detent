@@ -35,17 +35,32 @@ class Slot(val col: Col, val index: Int, val d: Float, val rIn: Float, val rOut:
 
 /** Ring bands relative to the rim radius [r]. [deep] runs 0 (main only) to 1 (side columns out). */
 class Bands(r: Float, private val deep: Float) {
-    private fun lerp(a: Float, b: Float) = a + (b - a) * deep
-    val mainIn = lerp(r + 16f, r + 10f)
-    val mainOut = lerp(r + 206f, r + 118f)
-    val outIn = r + 124f
-    val outOut = r + 214f
-    val inIn = r - 178f
-    val inOut = r - 8f
+    private fun lerp(a: Float, b: Float) = a + (b - a) * (deep * deep * (3 - 2 * deep))
+    val mainIn = r + 14f
+    val mainOut = lerp(r + 196f, r + 106f)
+    val outIn = r + 114f
+    val outOut = r + 222f
+    val inIn = r - 150f
+    val inOut = r - 10f
 }
 
+/** How long a finger rests on a pane before its side options open, in ms. */
+const val PANE_DWELL = 450L
+
+/**
+ * Half the angular height of a lens at [t], from -1 (inner end) to 1 (outer end), as a share of [PANE_HALF].
+ * Spectacle lenses are fuller toward the outer end and taper toward the dial, with a soft round nose.
+ */
+fun lensHalf(t: Float): Float {
+    val u = t.coerceIn(-1f, 1f)
+    return .74f + .2f * u + .06f * (1 - u * u)
+}
+
+/** Superellipse exponent of the lens outline: 2 is an ellipse, higher is squarer. */
+const val LENS_POWER = 2.6f
+
 /** Half the angular height of a pane, in rows. The rest of the step is the gap between panes. */
-const val PANE_HALF = .43f
+const val PANE_HALF = .45f
 
 /** Most quick actions shown at once. */
 const val PANE_MAX = 9
@@ -141,7 +156,7 @@ fun pickSlot(slots: List<Slot>, p: Polar, deep: Boolean, reach: Float = .9f, str
  * average of the hold so far; phones that report no pressure (always 1, or always 0) never trip it.
  * [dwellMs] of resting on one pane counts as a deep press too, so every phone has one.
  */
-class DeepPress(private val dwellMs: Long = 700L, private val rise: Float = .14f, private val ratio: Float = 1.3f) {
+class DeepPress(private val dwellMs: Long = PANE_DWELL, private val rise: Float = .14f, private val ratio: Float = 1.3f) {
     private var base = -1f
     private var hits = 0
     private var restT = 0L

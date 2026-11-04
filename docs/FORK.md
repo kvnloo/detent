@@ -81,15 +81,18 @@ on a debug build).
 
 ## Quick panes
 
-On a radial dial, each row has quick actions laid out as glass slices of the dial's own ring, one dial
-step per pane, beside the rim:
+On a radial dial, each row has quick actions laid out as glass lenses, shaped like spectacle lenses and
+bent along the dial's own ring, one dial step per lens, beside the rim. The dial blurs behind them:
 
 - **Hold** the selected row: panes fan out (latest two notifications, then the app's shortcuts; a folder
   shows its apps). Keep the finger down and **slide up or down** to pick; let go to run it. Let go on the
   row itself and the panes stay open for taps.
-- **Press harder** (or rest on a pane for 0.7 s, for screens without pressure) and the picked pane opens
-  side panes: further out, app info / remove (or clear, for a notification); over the dial, move / folder /
-  swipe app (or the notification's buttons). Slide sideways onto one and let go.
+- **Hold any name**, not just the selected one: that row turns into the notch and its lenses open. Holding
+  the bare rim or ticks keeps the letter jump.
+- **Press harder** (or rest on a lens for 0.45 s; a ring fills along its edge) and the picked lens opens
+  side options: over the dial and toward the screen edge. On the app's own name these are the edit
+  options (move, tap action, swipe app, folder, info, remove). Slide sideways onto one and let go, or let
+  go on the pressed lens and the options stay open to tap.
 - **Swipe sideways** on a row: away from the dial centre opens its panes; toward it runs the swipe app or
   opens the folder, as before.
 
