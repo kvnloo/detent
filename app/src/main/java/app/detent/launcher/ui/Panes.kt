@@ -151,7 +151,10 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
             val bad = p.tone == Tone.Danger
 
             // Size the pill to its label (and caption), within its band.
-            val band = slot.rOut - slot.rIn
+            // Pills toward the screen edge may run past their band, up to 14 units from the edge, so a label fits.
+            val c = cos(ang)
+            val edge = if (c > .05f) (g.cx - 14f) / c else slot.rOut
+            val band = if (slot.col == Col.Out) maxOf(slot.rOut, minOf(edge, slot.rOut + 90f)) - slot.rIn else slot.rOut - slot.rIn
             val maxText = ((band - hw * 2.2f) * kk).toInt().coerceAtLeast(1)
             val textColor = when {
                 isHot -> if (bad) Color.White else ink
