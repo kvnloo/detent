@@ -1842,9 +1842,11 @@ class LauncherState(
 
     private fun openMenu() {
         val app = curApp() ?: return
-        val shortcuts = repo.shortcuts(app, if (kind == Kind.Radial) 6 else 4)
+        val shortcuts = repo.shortcuts(app, 4)
         menu = QuickMenu(app, shortcuts, panes = if (kind == Kind.Radial) paneSet(app, shortcuts) else null)
         menuShown = true
+        // Over the system wallpaper, frost it while the panes are open, as glass over a material.
+        if (menu?.panes != null && seeThrough) host.setGlassBlur(PANE_FROST)
         paneHot = null
         paneDeep = false
         paneAnchor = null
@@ -1862,6 +1864,7 @@ class LauncherState(
 
     fun closeMenu() {
         if (menu == null) return
+        if (menu?.panes != null && seeThrough) syncGlass()
         menuShown = false
         paneHot = null
         paneDeep = false
@@ -1949,25 +1952,31 @@ class LauncherState(
         val kids = row.kids
         val main = ArrayList<Pane>()
         val manage = manageSides(row)
+        var caption = ""
         if (kids != null) {
-            // A folder: its apps, one pane each.
-            kids.forEach { kid -> main += Pane("kid:${kid.key}", kid.display, "", Tone.Action) { paneLaunch(kid, "") } }
+            // A folder: its apps, one pane each. A long folder ends on "more", which opens it on the dial.
+            val shown = if (kids.size > PANE_MAX) kids.take(PANE_MAX - 1) else kids
+            shown.forEach { kid -> main += Pane("kid:${kid.key}", kid.display, "", Tone.Action) { paneLaunch(kid, "") } }
+            if (kids.size > PANE_MAX) {
+                val k = selIndex(dialApps.size)
+                main += Pane("more", "${kids.size - shown.size} more", "", Tone.Setting) {
+                    closeMenu()
+                    enterFolder(k, row)
+                }
+            }
+            caption = "folder · ${kids.size}"
         } else {
-            if (notifAccess) {
-                Unread.notes.value[row.pkgUser].orEmpty().take(2).forEach { n -> main += notePane(row, n) }
+            val notes = if (notifAccess) Unread.notes.value[row.pkgUser].orEmpty().take(2) else emptyList()
+            notes.forEach { n -> main += notePane(row, n) }
+            // Shortcuts are plain actions; the app's own settings live on its name, not on every shortcut.
+            shortcutLabels(shortcuts, row.display).forEach { (info, label) ->
+                main += Pane("sc:${info.id}", label, "", Tone.Action) { menuShortcut(info) }
             }
-            shortcuts.forEach { info ->
-                val label = (info.shortLabel ?: info.longLabel)?.toString()?.lowercase().orEmpty()
-                main += Pane("sc:${info.id}", label, "", Tone.Action, manage.first, manage.second) { menuShortcut(info) }
-            }
+            if (notes.isNotEmpty()) caption = "${notes.size} new"
         }
         val list = main.take(PANE_MAX)
         val rows = paneRows(list.size, below, above)
-        val hint = when {
-            list.isEmpty() -> "no quick actions · rest for more"
-            else -> "slide to pick · rest or press for more"
-        }
-        val head = Pane("head", row.display, hint, Tone.Head, manage.first, manage.second) { launchSelected() }
+        val head = Pane("head", row.display, caption, Tone.Head, manage.first, manage.second) { launchSelected() }
         return PaneSet(head, list.take(rows.size), rows, -above.toFloat(), below.toFloat())
     }
 
@@ -1978,7 +1987,7 @@ class LauncherState(
         val inn = ArrayList<Pane>()
         when {
             inFolder -> {
-                out += Pane("info", "app info", tone = Tone.Setting) { menuInfo() }
+                out += Pane("info", "info", tone = Tone.Setting) { menuInfo() }
                 out += Pane("out", "take out", tone = Tone.Danger) { menuTakeOut() }
                 inn += Pane("move", "move", tone = Tone.Setting) { menuMove() }
             }
@@ -1989,7 +1998,7 @@ class LauncherState(
                 inn += Pane("folder", "edit folder", tone = Tone.Setting) { menuFolder() }
             }
             else -> {
-                out += Pane("info", "app info", tone = Tone.Setting) { menuInfo() }
+                out += Pane("info", "info", tone = Tone.Setting) { menuInfo() }
                 out += Pane("remove", "remove", tone = Tone.Danger) { menuRemove() }
                 inn += Pane("move", "move", tone = Tone.Setting) { menuMove() }
                 inn += Pane("folder", "make folder", tone = Tone.Setting) { menuFolder() }
@@ -1999,6 +2008,9 @@ class LauncherState(
         }
         return out to inn
     }
+
+    private fun shortcutLabels(list: List<ShortcutInfo>, app: String) =
+        paneLabels(list, app) { (it.shortLabel ?: it.longLabel)?.toString() }
 
     private fun notePane(row: AppEntry, n: Note): Pane {
         val title = n.title.ifEmpty { n.text }.lowercase()

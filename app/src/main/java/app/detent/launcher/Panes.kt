@@ -7,8 +7,8 @@ import kotlin.math.max
 import kotlin.math.min
 
 /*
- * Quick panes: hold a dial row and its quick actions fan out beside the dial as slices of rings round the
- * dial centre, one slice per dial step. Slide up or down to pick one and let go to run it. Press harder
+ * Quick panes: hold a dial row and its quick actions fan out beside the dial as glass pills laid along the
+ * dial's radii, one pill per dial step. Slide up or down to pick one and let go to run it. Press harder
  * (or rest on a pane) and the picked pane opens side panes: [Col.Out] further from the dial, [Col.In]
  * over the dial's names. This file is the pure part: the slices, the hit test and the press detector.
  */
@@ -48,22 +48,25 @@ class Bands(r: Float, private val deep: Float) {
 const val PANE_DWELL = 450L
 
 /**
- * Half the angular height of a lens at [t], from -1 (inner end) to 1 (outer end), as a share of [PANE_HALF].
- * Spectacle lenses are fuller toward the outer end and taper toward the dial, with a soft round nose.
+ * Half the thickness of a pill pane across the ring, in design units, for a dial of [step] radians per row
+ * at radius [r]. Pills keep one thickness end to end (Elemental UI's capsule), with a gap between rows.
  */
-fun lensHalf(t: Float): Float {
-    val u = t.coerceIn(-1f, 1f)
-    return .74f + .2f * u + .06f * (1 - u * u)
-}
+fun pillHalf(step: Float, r: Float): Float = (.36f * step * r).coerceIn(9f, 15f)
 
-/** Superellipse exponent of the lens outline: 2 is an ellipse, higher is squarer. */
-const val LENS_POWER = 2.6f
+/**
+ * Length of a pill along the radius that holds a label [textW] wide, with half-thickness [hw]: the label
+ * plus a round end's worth of room each side, at least a short capsule, at most [max] (the band).
+ */
+fun pillLength(textW: Float, hw: Float, max: Float): Float {
+    val short = min(hw * 3.4f, max)
+    return (textW + hw * 2.2f).coerceIn(short, max)
+}
 
 /** Half the angular height of a pane, in rows. The rest of the step is the gap between panes. */
 const val PANE_HALF = .45f
 
 /** Most quick actions shown at once. */
-const val PANE_MAX = 9
+const val PANE_MAX = 6
 
 /**
  * The rows that [n] main panes take. They fill downward from the row under the held app, up to [below]
@@ -187,5 +190,21 @@ class DeepPress(private val dwellMs: Long = PANE_DWELL, private val rise: Float 
             return false
         }
         return on != null && t - restT >= dwellMs
+    }
+}
+
+/** The window frost behind open quick panes over the system wallpaper (Elemental UI's 22 px blur). */
+val PANE_FROST = GlassLook(tint = 0f, frost = .4f, light = 0f, fringe = 0f)
+
+/**
+ * The labels that quick panes show for [shortcuts] of the app called [appName]: the short label in lower case,
+ * trimmed, without blanks, repeats or ones that only say the app's name.
+ */
+fun <T> paneLabels(shortcuts: List<T>, appName: String, label: (T) -> String?): List<Pair<T, String>> {
+    val seen = HashSet<String>()
+    val name = appName.trim().lowercase()
+    return shortcuts.mapNotNull { sc ->
+        val l = label(sc)?.trim()?.lowercase()?.replace(Regex("\\s+"), " ").orEmpty()
+        if (l.isEmpty() || l == name || !seen.add(l)) null else sc to l
     }
 }

@@ -200,13 +200,17 @@ private fun Home(s: LauncherState) {
         val wave = rememberVoiceWave(s)
         val ctx = LocalContext.current
         val status = remember { DeviceStatus(ctx.applicationContext) }
-        if (!grid) Wallpaper(THEMES[live], pal, s.left, s.customWall, row, themeStep, s.themeJump != null, seeThroughShade(s))
+        // Open quick panes frost the wallpaper and blur the dial behind them: glass over a material.
+        val veil = if (grid) 0f else panesVeil(s)
+        if (!grid) Box(
+            Modifier.fillMaxSize().then(if (veil > .01f) Modifier.blur(LocalUnits.current.dp(14f * veil)) else Modifier),
+        ) {
+            Wallpaper(THEMES[live], pal, s.left, s.customWall, row, themeStep, s.themeJump != null, seeThroughShade(s))
+        }
         GestureLayer(s)
         if (grid) {
             DotGrid(s, pal, wave, status)
         } else {
-            // Open quick panes blur and dim the dial behind them, so the lenses read over any wallpaper.
-            val veil = panesVeil(s)
             Box(
                 Modifier.fillMaxSize()
                     .then(if (veil > .01f) Modifier.blur(LocalUnits.current.dp(6f * veil)) else Modifier)
@@ -220,7 +224,7 @@ private fun Home(s: LauncherState) {
         if (s.kind != Kind.Readout) ScrubLetter(s, pal)
         PressRing(s, pal)
         AppsHint(s, pal)
-        CornerButtons(s, pal)
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - .75f * veil }) { CornerButtons(s, pal) }
         HearLayer(s, pal)
         if (s.ob != null) {
             Onboarding(s, pal, THEMES[live])

@@ -98,24 +98,40 @@ class PanesTest {
     }
 
     @Test
-    fun lensIsFullerTowardTheOuterEnd() {
-        assertTrue(lensHalf(1f) > lensHalf(0f))
-        assertTrue(lensHalf(0f) > lensHalf(-1f))
-        assertEquals(lensHalf(1f), lensHalf(5f), 0f)
-        assertTrue(lensHalf(1f) <= 1f)
+    fun pillsFitTheirLabelWithinTheBand() {
+        val hw = 12f
+        // A short label still makes a capsule, not a disc.
+        assertEquals(hw * 3.4f, pillLength(4f, hw, 180f), 0f)
+        // A label grows the pill by itself plus the round ends.
+        assertEquals(80f + hw * 2.2f, pillLength(80f, hw, 180f), 1e-3f)
+        // A long label stops at the band.
+        assertEquals(180f, pillLength(400f, hw, 180f), 0f)
+        assertEquals(20f, pillLength(4f, hw, 20f), 0f)
     }
 
     @Test
-    fun lensOutlineStaysInsideItsBandAndAngle() {
-        val pts = lensOutline(0f, 0f, 300f, 400f, 0f, .1f)
-        assertEquals(48, pts.size)
+    fun pillThicknessFollowsTheDialStepWithinLimits() {
+        assertEquals(.36f * .1f * 300f, pillHalf(.1f, 300f), 1e-4f)
+        assertEquals(15f, pillHalf(.5f, 300f), 0f)
+        assertEquals(9f, pillHalf(.01f, 300f), 0f)
+    }
+
+    @Test
+    fun pillOutlineStaysInsideItsBandAndWidth() {
+        val pts = pillOutline(0f, 0f, 300f, 400f, 0f, 12f)
         for (p in pts) {
             val r = kotlin.math.hypot(p.x, p.y)
             assertTrue("r=$r", r in 299.5f..400.5f)
-            assertTrue(kotlin.math.abs(kotlin.math.atan2(p.y, p.x)) <= .1f + 1e-4f)
+            // Constant thickness: the arc distance from the centre line stays within the half-thickness.
+            assertTrue(kotlin.math.abs(r * kotlin.math.atan2(p.y, p.x)) <= 12.01f)
         }
-        // Touches both radial ends.
         assertEquals(300f, pts.minOf { kotlin.math.hypot(it.x, it.y) }, .5f)
         assertEquals(400f, pts.maxOf { kotlin.math.hypot(it.x, it.y) }, .5f)
+    }
+
+    @Test
+    fun paneLabelsDropBlanksRepeatsAndTheAppName() {
+        val got = paneLabels(listOf("New  Chat", "", "Discord", "new chat", null, "Mom"), "Discord") { it }
+        assertEquals(listOf("new chat", "mom"), got.map { it.second })
     }
 }
