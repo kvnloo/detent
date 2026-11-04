@@ -328,6 +328,17 @@ class LauncherState(
         private set
     var press by mutableStateOf<Press?>(null)
         private set
+    var paneLift by mutableStateOf<PaneLift?>(null)
+        private set
+
+    private fun capturePaneLift(row: Int): PaneLift? {
+        val apps = dialApps
+        val app = apps.getOrNull(mod(row, maxOf(1, apps.size))) ?: return null
+        val d = row - pos
+        val scale = labelScale(abs(d), app.display.length)
+        val p = labelPose(d, app.display.length, scale, Geo(radius, cy, layout.ax), layout.markers, left)
+        return PaneLift(app.key, app.display, rowIcon(app), Pose(p.x, p.y, p.rot, scale, p.tx))
+    }
     var search by mutableStateOf(false)
         private set
     var query by mutableStateOf("")
@@ -988,6 +999,10 @@ class LauncherState(
         }
         if (kind == Kind.Readout && ob == null && scrub == null && edge == Edge.None) showName()
         if (zone != Zone.None) {
+            if (kind == Kind.Radial && ob == null && edge == Edge.None && !d.caught) {
+                val row = nameRowAt(x, y) ?: if (zone == Zone.Selected) pos.roundToInt() else null
+                paneLift = row?.let { capturePaneLift(it) }
+            }
             press = Press(++seq, x, y)
             lpJob?.cancel()
             lpJob = scope.launch {
@@ -1134,6 +1149,7 @@ class LauncherState(
     private fun cancelPress() {
         lpJob?.cancel()
         press = null
+        if (!menuShown) paneLift = null
     }
 
     private fun longPress() {
@@ -1146,6 +1162,7 @@ class LauncherState(
             val named = if (kind == Kind.Radial) nameRowAt(d.x0, d.y0) else null
             val before = pos.roundToInt()
             if (named == null) {
+                paneLift = null
                 startScrub()
                 return
             }
@@ -1842,6 +1859,7 @@ class LauncherState(
 
     private fun openMenu() {
         val app = curApp() ?: return
+        if (kind == Kind.Radial && paneLift?.key != app.key) paneLift = capturePaneLift(pos.roundToInt())
         val shortcuts = repo.shortcuts(app, 4)
         menu = QuickMenu(app, shortcuts, panes = if (kind == Kind.Radial) paneSet(app, shortcuts) else null)
         menuShown = true
@@ -1872,7 +1890,10 @@ class LauncherState(
         dwellJob?.cancel()
         scope.launch {
             delay(200)
-            if (!menuShown) menu = null
+            if (!menuShown) {
+                menu = null
+                paneLift = null
+            }
         }
     }
 

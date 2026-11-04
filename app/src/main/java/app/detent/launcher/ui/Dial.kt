@@ -63,7 +63,8 @@ fun DialCanvas(s: LauncherState, pal: Palette, wave: VoiceWave) {
     val counts = if (scrub == null && !themeStep) remember(apps) { apps.map { it.count } } else emptyList()
     val swipe = s.swipeRow?.let { r -> Swipe(mod(r, maxOf(1, names.size)), s.swipeDx, s.swipeArmed) }
     val o = s.open
-    val hide = if (o != null && o.fromDial && dots != null) apps.indexOfFirst { it.key == o.key } else -1
+    val hide = s.paneLift?.let { lift -> apps.indexOfFirst { it.key == lift.key } }
+        ?: if (o != null && o.fromDial && dots != null) apps.indexOfFirst { it.key == o.key } else -1
     val layout = s.layout
     val left = s.left
     val alpha by animateFloatAsState(
