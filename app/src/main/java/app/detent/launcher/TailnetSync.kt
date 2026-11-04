@@ -302,7 +302,7 @@ object TailnetSync {
                         val b = ByteArray(8192)
                         while (true) { val n = i.read(b); if (n < 0) break; out.write(b, 0, n); check(out.size() <= MAX_MANIFEST) }
                     }
-                    parseManifest(out.toString(Charsets.UTF_8))?.also { m ->
+                    parseManifest(String(out.toByteArray(), Charsets.UTF_8))?.also { m ->
                         synchronized(manifests) { c.getHeaderField("ETag")?.let { etags[base] = it }; manifests[base] = m }
                     }
                 }
