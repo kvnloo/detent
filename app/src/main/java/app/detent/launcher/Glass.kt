@@ -126,10 +126,127 @@ half4 main(float2 p) {
 }
 """
 
+/*
+ * A glass lens: a spectacle-lens shape laid along the dial's ring, between rIn and rOut, centred on the
+ * screen angle mid and span radians to each side at its fullest. The outline is a superellipse in the
+ * ring's own polar frame (out along the radius, across along the arc), fuller toward the outer end
+ * (lensHalf), so it bends with the dial. Light: a domed body, a chromatic fresnel rim, a specular crescent
+ * and glint toward the light, a soft caustic in the accent on the far side, and a thicker, darker edge.
+ */
+private const val LENS_SRC = """
+uniform float2 c;
+uniform float rIn;
+uniform float rOut;
+uniform float mid;
+uniform float span;
+uniform float pw;
+uniform half4 tint;
+uniform half4 accent;
+uniform float glow;
+uniform float fresnel;
+uniform float specular;
+uniform float bevel;
+uniform float noise;
+uniform float chroma;
+uniform float bw;
+
+float hash(float2 p) { return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
+
+float lensHalf(float t) { float u = clamp(t, -1.0, 1.0); return 0.74 + 0.2 * u + 0.06 * (1.0 - u * u); }
+
+half4 main(float2 p) {
+    float2 v = p - c;
+    float d = length(v);
+    float a = atan(v.y, v.x) - mid;
+    a = a - 6.2831853 * floor((a + 3.1415927) / 6.2831853);
+    float bx = (rOut - rIn) * 0.5;
+    float qx = d - (rIn + rOut) * 0.5;
+    float hy = max(d * span * lensHalf(qx / bx), 1.0);
+    float qy = d * a;
+    float X = abs(qx) / bx;
+    float Y = abs(qy) / hy;
+    float f = pow(X, pw) + pow(Y, pw) - 1.0;
+    float gx = pw * pow(max(X, 1e-4), pw - 1.0) / bx;
+    float gy = pw * pow(max(Y, 1e-4), pw - 1.0) / hy;
+    float gl = length(float2(gx, gy)) + 1e-4;
+    float e = min(-f / gl, 400.0);
+    if (e < -1.0) return half4(0.0);
+    float aa = clamp(e + 0.5, 0.0, 1.0);
+
+    float2 n = v / max(d, 0.001);
+    float2 t = float2(-n.y, n.x);
+    float2 nl = normalize(float2(gx * sign(qx + 1e-4), gy * sign(qy + 1e-4)));
+    float2 nrm = n * nl.x + t * nl.y;
+    float2 L = float2(-0.7071, -0.7071);
+    float h = sqrt(clamp(-f, 0.0, 1.0));
+    float prox = exp(-max(e, 0.0) / bw);
+    float p2 = prox * prox;
+
+    float s = chroma * 0.35 * bw;
+    float fr = exp(-max(e - s, 0.0) / bw);
+    float fb = exp(-max(e + s, 0.0) / bw);
+    half3 rim = half3(fr * fr, p2, fb * fb) * fresnel * 0.6;
+
+    float lit = max(dot(nrm, L), 0.0);
+    float spec = pow(lit, 5.0) * p2 * specular * 1.3;
+    float line = exp(-max(e, 0.0) / max(bw * 0.12, 1.0)) * fresnel * 0.55;
+    // Inside the lens, in its own unit frame turned to the screen.
+    float2 sp = n * (qx / bx) + t * (qy / hy);
+    float dg = length(sp - L * 0.48);
+    float glint = exp(-dg * dg * 10.0) * specular * 0.22;
+    float dc = length(sp + L * 0.5);
+    float caustic = exp(-dc * dc * 6.0) * (0.1 + 0.25 * glow);
+    float shade = max(dot(nrm, -L), 0.0) * p2 * bevel * 0.5;
+    float thick = (1.0 - h) * 0.14;
+
+    half3 pm = tint.rgb * tint.a;
+    float al = tint.a;
+    half3 light = rim + half3(1.0, 0.99, 0.97) * (spec + line + glint) + accent.rgb * caustic;
+    pm += light;
+    al += clamp((rim.g + spec + line + glint + caustic) * 0.75, 0.0, 1.0);
+    float sh = clamp(shade + thick, 0.0, 0.6) * 0.5;
+    pm *= 1.0 - sh;
+    al = al + sh * (1.0 - al);
+    pm += (hash(p) - 0.5) * noise * 0.18 * al;
+    al = clamp(al, 0.0, 1.0);
+    return half4(clamp(pm, half3(0.0), half3(al)), al) * aa;
+}
+"""
+
 /** Draws lit glass bands and beads. Null shader below Android 13; then it draws a plain tinted band. */
 class GlassFx {
     private val shader: RuntimeShader? = if (Build.VERSION.SDK_INT >= 33) RuntimeShader(SRC) else null
     private val brush = shader?.let { ShaderBrush(it) }
+    private val lenser: LensShader? = if (Build.VERSION.SDK_INT >= 33) LensShader() else null
+
+    /**
+     * A glass lens along the ring round ([cx], [cy]) between radii [rIn] and [rOut], centred on the screen angle
+     * [mid] and [half] radians to each side at its fullest. Lengths in px. [glow] 0..1 lights the caustic in
+     * [accent]. Below Android 13 the same outline, tinted, with a rim.
+     */
+    fun DrawScope.lens(
+        cx: Float, cy: Float, rIn: Float, rOut: Float, mid: Float, half: Float,
+        tint: Color, accent: Color, glow: Float, rimColor: Color, g: GlassLook, k: Float,
+    ) {
+        if (rOut - rIn < 2f) return
+        val outline = lensOutline(cx, cy, rIn, rOut, mid, half)
+        val sh = lenser
+        if (sh == null || Build.VERSION.SDK_INT < 33) {
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(outline[0].x, outline[0].y)
+                for (i in 1 until outline.size) lineTo(outline[i].x, outline[i].y)
+                close()
+            }
+            drawPath(path, tint)
+            drawPath(path, rimColor, style = androidx.compose.ui.graphics.drawscope.Stroke(k))
+            return
+        }
+        val br = sh.brush(cx, cy, rIn, rOut, mid, half, tint, accent, glow, g, maxOf(2f * k, minOf(rOut - rIn, 2f * rOut * half) * .2f))
+        // Only the box round the lens runs the shader.
+        val x0 = outline.minOf { it.x } - 4
+        val y0 = outline.minOf { it.y } - 4
+        drawRect(br, Offset(x0, y0), Size(outline.maxOf { it.x } + 4 - x0, outline.maxOf { it.y } + 4 - y0))
+    }
 
     /** A glass ring centred at [cx], [cy] (px) between radii [rIn] and [rOut] (px). */
     fun DrawScope.band(cx: Float, cy: Float, rIn: Float, rOut: Float, tint: Color, g: GlassLook, k: Float) {
@@ -155,4 +272,52 @@ class GlassFx {
     /** A glass bead: a disc of radius [r] (px). */
     fun DrawScope.bead(cx: Float, cy: Float, r: Float, tint: Color, g: GlassLook, k: Float) =
         band(cx, cy, -100000f, r, tint, g, k)
+}
+
+/** The lens shader and its brush. Android 13 and up only; [GlassFx.lens] draws the plain outline below that. */
+@androidx.annotation.RequiresApi(33)
+private class LensShader {
+    private val shader = RuntimeShader(LENS_SRC)
+    private val brush = ShaderBrush(shader)
+
+    fun brush(
+        cx: Float, cy: Float, rIn: Float, rOut: Float, mid: Float, half: Float,
+        tint: Color, accent: Color, glow: Float, g: GlassLook, bw: Float,
+    ): ShaderBrush {
+        shader.setFloatUniform("c", cx, cy)
+        shader.setFloatUniform("rIn", rIn)
+        shader.setFloatUniform("rOut", rOut)
+        shader.setFloatUniform("mid", mid)
+        shader.setFloatUniform("span", half)
+        shader.setFloatUniform("pw", LENS_POWER)
+        shader.setFloatUniform("tint", tint.red, tint.green, tint.blue, tint.alpha)
+        shader.setFloatUniform("accent", accent.red, accent.green, accent.blue, accent.alpha)
+        shader.setFloatUniform("glow", glow)
+        shader.setFloatUniform("fresnel", g.fresnel)
+        shader.setFloatUniform("specular", g.specular)
+        shader.setFloatUniform("bevel", g.bevel)
+        shader.setFloatUniform("noise", g.noise)
+        shader.setFloatUniform("chroma", g.chroma)
+        shader.setFloatUniform("bw", bw)
+        return brush
+    }
+}
+
+/**
+ * The outline of a lens (see [GlassFx.lens]) as [n] points, in px. The superellipse is traced in the ring's
+ * polar frame: x out along the radius, y along the arc at that radius.
+ */
+fun lensOutline(cx: Float, cy: Float, rIn: Float, rOut: Float, mid: Float, half: Float, n: Int = 48): List<Offset> {
+    val bx = (rOut - rIn) / 2f
+    val rm = (rIn + rOut) / 2f
+    val e = 2f / LENS_POWER
+    fun sp(v: Float) = kotlin.math.sign(v) * Math.pow(kotlin.math.abs(v).toDouble(), e.toDouble()).toFloat()
+    return List(n) { i ->
+        val th = 2 * Math.PI.toFloat() * i / n
+        val x = bx * sp(kotlin.math.cos(th))
+        val r = rm + x
+        val y = r * half * lensHalf(x / bx) * sp(kotlin.math.sin(th))
+        val ang = mid + y / maxOf(r, 1f)
+        Offset(cx + r * kotlin.math.cos(ang), cy + r * kotlin.math.sin(ang))
+    }
 }

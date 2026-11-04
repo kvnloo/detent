@@ -13,6 +13,7 @@ installation receipts. This fork is upstream
 | tabbed setup (shape / theme / apps / feel), custom dial, glass presets, hold-to-pick controls, haptics | `ui/Hold.kt`, `Glass.kt`, `Feedback.kt` |
 | folders, sideways swipe to launch, dial reordering, auto density | `Groups.kt` (PR #4) |
 | themes remembered by name; settings export and import | `Prefs.kt`, `SettingsBackup.kt` (PRs #3, #2) |
+| quick panes: hold a row (or swipe it away from the dial) for its shortcuts and notifications as glass ring slices; slide to pick; press harder or rest for side panes | `Panes.kt`, `ui/Panes.kt`, `Glass.kt` slice shader |
 
 The full map for setting up the phone around it (adb, Hermes phone-harness, Wallpaper
 Engine, colour sync) is in my dotfiles:
@@ -77,3 +78,25 @@ on a debug build).
 - Hidden virtual displays never draw the wallpaper, so they can't prove see-through themes.
 - Top-level `val`s in `Model.kt` initialise in file order; a list read by `LAYOUTS` must be
   declared above it (`CustomLayoutTest` catches it).
+
+## Quick panes
+
+On a radial dial, each row has quick actions laid out as glass lenses, shaped like spectacle lenses and
+bent along the dial's own ring, one dial step per lens, beside the rim. The dial blurs behind them:
+
+- **Hold** the selected row: panes fan out (latest two notifications, then the app's shortcuts; a folder
+  shows its apps). Keep the finger down and **slide up or down** to pick; let go to run it. Let go on the
+  row itself and the panes stay open for taps.
+- **Hold any name**, not just the selected one: that row turns into the notch and its lenses open. Holding
+  the bare rim or ticks keeps the letter jump.
+- **Press harder** (or rest on a lens for 0.45 s; a ring fills along its edge) and the picked lens opens
+  side options: over the dial and toward the screen edge. On the app's own name these are the edit
+  options (move, tap action, swipe app, folder, info, remove). Slide sideways onto one and let go, or let
+  go on the pressed lens and the options stay open to tap.
+- **Swipe sideways** on a row: away from the dial centre opens its panes; toward it runs the swipe app or
+  opens the folder, as before.
+
+The shortcuts are Android's own (`LauncherApps.getShortcuts`, given to the default home app) and the
+notifications come from the notification access Detent already has. Usage access is not needed. Reply
+buttons that need typed text are left out. Grid layouts keep the card menu.
+
