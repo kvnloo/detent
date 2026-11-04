@@ -89,7 +89,7 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
     val onGlass = if (pal.light) pal.fg else Color.White
     val shade = if (pal.light) null else Color.Black.copy(alpha = .35f)
     val ink = Color(0xFF1B1A18)
-    val danger = Color(0xFFFF7A7A)
+    val danger = if (pal.light) Color(0xFFB42318) else Color(0xFFFF7A7A)
     val styles = remember(u, pal) {
         PaneStyles(
             label = textStyle(u, 13f, onGlass, FontWeight.Medium, spacing = .01f, halo = shade),
