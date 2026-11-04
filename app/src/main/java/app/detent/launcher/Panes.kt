@@ -37,10 +37,10 @@ class Slot(val col: Col, val index: Int, val d: Float, val rIn: Float, val rOut:
 class Bands(r: Float, private val deep: Float) {
     private fun lerp(a: Float, b: Float) = a + (b - a) * (deep * deep * (3 - 2 * deep))
     val mainIn = r + 14f
-    val mainOut = lerp(r + 196f, r + 106f)
-    val outIn = r + 114f
-    val outOut = r + 222f
-    val inIn = r - 150f
+    val mainOut = lerp(r + 196f, r + 122f)
+    val outIn = r + 128f
+    val outOut = r + 220f
+    val inIn = r - 130f
     val inOut = r - 10f
 }
 
