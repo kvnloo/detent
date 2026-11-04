@@ -146,10 +146,12 @@ class AppsRepository(private val ctx: Context) {
                 .setPackage(app.component.packageName)
                 .setActivity(app.component)
                 .setQueryFlags(LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC)
-            la.getShortcuts(q, app.user).orEmpty()
-                .filter { it.isEnabled }
-                .sortedWith(compareBy({ if (it.isDeclaredInManifest) 0 else 1 }, { it.rank }))
-                .take(max)
+            val all = la.getShortcuts(q, app.user).orEmpty().filter { it.isEnabled }
+            // The app's own top two actions first (new message, new tab), then its recent ones (the people you
+            // talk to, the docs you opened), then the rest of its actions.
+            val fixed = all.filter { it.isDeclaredInManifest }.sortedBy { it.rank }
+            val recent = all.filter { !it.isDeclaredInManifest }.sortedBy { it.rank }
+            (fixed.take(2) + recent + fixed.drop(2)).take(max)
         }
     } catch (e: Exception) {
         emptyList()

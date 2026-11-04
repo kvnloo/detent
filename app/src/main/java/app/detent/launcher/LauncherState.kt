@@ -93,8 +93,21 @@ interface Host {
     /** Blurs what is behind the window (a live wallpaper) as [look] says, or stops blurring when null. */
     fun setGlassBlur(look: GlassLook?)
 
-    /** Hands a live wallpaper package to its wallpaper app, which asks to apply it. */
+    /**
+     * Switches to a live theme's scene. With the wallpaper switch on, Detent applies it itself; otherwise the
+     * wallpaper app opens and asks for one tap.
+     */
     fun openLiveWallpaper(theme: ThemeDef): Boolean
+
+    /** The package of the live wallpaper now set, or null for a still. */
+    fun liveWallpaperPackage(): String?
+
+    /** True when Detent's wallpaper switch (an accessibility service) is turned on. */
+    fun wallpaperSwitchOn(): Boolean
+    fun openWallpaperSwitchSettings()
+
+    /** Tells the owner's other machines that this phone chose [theme]. */
+    fun publishTheme(theme: String)
 
     fun launchApp(app: AppEntry, bounds: Rect?)
 
@@ -616,8 +629,15 @@ class LauncherState(
 
     // Activity hooks.
 
+    /** Detent's wallpaper switch is on, so live themes apply without a tap in Wallpaper Engine. */
+    var switchOn by mutableStateOf(false)
+        private set
+
+    fun openSwitchSettings() = host.openWallpaperSwitchSettings()
+
     fun onResume() {
         resumed = true
+        switchOn = host.wallpaperSwitchOn()
         now = System.currentTimeMillis()
         notifAccess = host.hasNotificationAccess()
         isHome = host.isDefaultHome()
@@ -1302,7 +1322,9 @@ class LauncherState(
         ob = n
         obSeq++
         if (n == null) {
+            val before = prefs.load()?.cfg?.theme
             persist()
+            if (before != cfg.theme) THEME_NAMES.getOrNull(cfg.theme)?.let { host.publishTheme(it) }
             host.cleanWallpapers(customWall)
             syncWallpaper()
             syncLive()
@@ -1312,11 +1334,26 @@ class LauncherState(
         run()
     }
 
+    /** Another device chose [name]: switch to it here too, unless the setup is open. */
+    fun followTheme(name: String, device: String) {
+        if (ob != null) return
+        val i = THEME_NAMES.indexOf(name).takeIf { it >= 0 } ?: return
+        if (i == cfg.theme) return
+        cfg = cfg.copy(theme = i)
+        persist()
+        syncWallpaper()
+        syncLive()
+        syncGlass()
+        showToast("$name · from ${device.lowercase()}")
+    }
+
     /** A live theme asks its wallpaper app to switch, once per change of theme. */
     private fun syncLive() {
         val t = THEMES[cfg.theme]
         val key = t.importId ?: t.name
-        if ((t.group != Synced.LIVE_GROUP && t.liveSource == null && t.mobilePackage == null) || prefs.appliedLive == key) return
+        if (t.group != Synced.LIVE_GROUP && t.liveSource == null && t.mobilePackage == null) return
+        // A still theme in between replaces the live wallpaper, so "already applied" only counts while it is still set.
+        if (prefs.appliedLive == key && host.liveWallpaperPackage() == WallpaperSwitch.WE_PACKAGE) return
         if (host.openLiveWallpaper(t) && (t.group == Synced.LIVE_GROUP || t.mobilePackage != null)) prefs.appliedLive = key
     }
 
@@ -1330,7 +1367,10 @@ class LauncherState(
         val key = "${THEMES[cfg.theme].name}|${cfg.side}|${if (grid) "grid" else custom ?: "theme"}"
         if (prefs.appliedWall == key) return
         host.setWallpaper(THEMES[cfg.theme], PALETTES[cfg.theme], left, custom, grid) { ok ->
-            if (ok) prefs.appliedWall = key else showToast("can't set the lock screen")
+            if (ok) {
+                prefs.appliedWall = key
+                prefs.appliedLive = null
+            } else showToast("can't set the lock screen")
         }
     }
 
@@ -1802,9 +1842,11 @@ class LauncherState(
 
     private fun openMenu() {
         val app = curApp() ?: return
-        val shortcuts = repo.shortcuts(app, if (kind == Kind.Radial) 6 else 4)
+        val shortcuts = repo.shortcuts(app, 4)
         menu = QuickMenu(app, shortcuts, panes = if (kind == Kind.Radial) paneSet(app, shortcuts) else null)
         menuShown = true
+        // Over the system wallpaper, frost it while the panes are open, as glass over a material.
+        if (menu?.panes != null && seeThrough) host.setGlassBlur(PANE_FROST)
         paneHot = null
         paneDeep = false
         paneAnchor = null
@@ -1822,6 +1864,7 @@ class LauncherState(
 
     fun closeMenu() {
         if (menu == null) return
+        if (menu?.panes != null && seeThrough) syncGlass()
         menuShown = false
         paneHot = null
         paneDeep = false
@@ -1909,25 +1952,31 @@ class LauncherState(
         val kids = row.kids
         val main = ArrayList<Pane>()
         val manage = manageSides(row)
+        var caption = ""
         if (kids != null) {
-            // A folder: its apps, one pane each.
-            kids.forEach { kid -> main += Pane("kid:${kid.key}", kid.display, "", Tone.Action) { paneLaunch(kid, "") } }
+            // A folder: its apps, one pane each. A long folder ends on "more", which opens it on the dial.
+            val shown = if (kids.size > PANE_MAX) kids.take(PANE_MAX - 1) else kids
+            shown.forEach { kid -> main += Pane("kid:${kid.key}", kid.display, "", Tone.Action) { paneLaunch(kid, "") } }
+            if (kids.size > PANE_MAX) {
+                val k = selIndex(dialApps.size)
+                main += Pane("more", "${kids.size - shown.size} more", "", Tone.Setting) {
+                    closeMenu()
+                    enterFolder(k, row)
+                }
+            }
+            caption = "folder · ${kids.size}"
         } else {
-            if (notifAccess) {
-                Unread.notes.value[row.pkgUser].orEmpty().take(2).forEach { n -> main += notePane(row, n) }
+            val notes = if (notifAccess) Unread.notes.value[row.pkgUser].orEmpty().take(2) else emptyList()
+            notes.forEach { n -> main += notePane(row, n) }
+            // Shortcuts are plain actions; the app's own settings live on its name, not on every shortcut.
+            shortcutLabels(shortcuts, row.display).forEach { (info, label) ->
+                main += Pane("sc:${info.id}", label, "", Tone.Action) { menuShortcut(info) }
             }
-            shortcuts.forEach { info ->
-                val label = (info.shortLabel ?: info.longLabel)?.toString()?.lowercase().orEmpty()
-                main += Pane("sc:${info.id}", label, "", Tone.Action, manage.first, manage.second) { menuShortcut(info) }
-            }
+            if (notes.isNotEmpty()) caption = "${notes.size} new"
         }
         val list = main.take(PANE_MAX)
         val rows = paneRows(list.size, below, above)
-        val hint = when {
-            list.isEmpty() -> "no quick actions · rest for more"
-            else -> "slide to pick · rest or press for more"
-        }
-        val head = Pane("head", row.display, hint, Tone.Head, manage.first, manage.second) { launchSelected() }
+        val head = Pane("head", row.display, caption, Tone.Head, manage.first, manage.second) { launchSelected() }
         return PaneSet(head, list.take(rows.size), rows, -above.toFloat(), below.toFloat())
     }
 
@@ -1938,7 +1987,7 @@ class LauncherState(
         val inn = ArrayList<Pane>()
         when {
             inFolder -> {
-                out += Pane("info", "app info", tone = Tone.Setting) { menuInfo() }
+                out += Pane("info", "info", tone = Tone.Setting) { menuInfo() }
                 out += Pane("out", "take out", tone = Tone.Danger) { menuTakeOut() }
                 inn += Pane("move", "move", tone = Tone.Setting) { menuMove() }
             }
@@ -1949,7 +1998,7 @@ class LauncherState(
                 inn += Pane("folder", "edit folder", tone = Tone.Setting) { menuFolder() }
             }
             else -> {
-                out += Pane("info", "app info", tone = Tone.Setting) { menuInfo() }
+                out += Pane("info", "info", tone = Tone.Setting) { menuInfo() }
                 out += Pane("remove", "remove", tone = Tone.Danger) { menuRemove() }
                 inn += Pane("move", "move", tone = Tone.Setting) { menuMove() }
                 inn += Pane("folder", "make folder", tone = Tone.Setting) { menuFolder() }
@@ -1959,6 +2008,9 @@ class LauncherState(
         }
         return out to inn
     }
+
+    private fun shortcutLabels(list: List<ShortcutInfo>, app: String) =
+        paneLabels(list, app) { (it.shortLabel ?: it.longLabel)?.toString() }
 
     private fun notePane(row: AppEntry, n: Note): Pane {
         val title = n.title.ifEmpty { n.text }.lowercase()
