@@ -1987,7 +1987,7 @@ class LauncherState(
         val inn = ArrayList<Pane>()
         when {
             inFolder -> {
-                out += Pane("info", "app info", tone = Tone.Setting) { menuInfo() }
+                out += Pane("info", "info", tone = Tone.Setting) { menuInfo() }
                 out += Pane("out", "take out", tone = Tone.Danger) { menuTakeOut() }
                 inn += Pane("move", "move", tone = Tone.Setting) { menuMove() }
             }
@@ -1998,7 +1998,7 @@ class LauncherState(
                 inn += Pane("folder", "edit folder", tone = Tone.Setting) { menuFolder() }
             }
             else -> {
-                out += Pane("info", "app info", tone = Tone.Setting) { menuInfo() }
+                out += Pane("info", "info", tone = Tone.Setting) { menuInfo() }
                 out += Pane("remove", "remove", tone = Tone.Danger) { menuRemove() }
                 inn += Pane("move", "move", tone = Tone.Setting) { menuMove() }
                 inn += Pane("folder", "make folder", tone = Tone.Setting) { menuFolder() }
