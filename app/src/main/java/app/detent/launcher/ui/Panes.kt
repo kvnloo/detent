@@ -99,7 +99,7 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
     }
     val smoke = if (pal.light) mix(pal.bg, Color.White, .4f).copy(alpha = .5f) else mix(pal.bg, Color.Black, .6f).copy(alpha = .36f)
     val rim = Color.White.copy(alpha = if (pal.light) .6f else .3f)
-    val solid = mix(Color.White, pal.accent, .08f).copy(alpha = .93f)
+    val solid = mix(Color.White, pal.accent, .92f).copy(alpha = .93f)
     val dangerSolid = Color(0xFFD9443F).copy(alpha = .93f)
 
     Canvas(
@@ -169,7 +169,8 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
                     overflow = TextOverflow.Ellipsis, maxLines = 1, constraints = Constraints(maxWidth = maxText),
                 )
             }
-            val textW = maxOf(main.size.width, cap?.size?.width ?: 0) / kk
+            val gap = 7f * kk
+            val textW = (main.size.width + (cap?.let { gap + it.size.width } ?: 0f)) / kk
             val len = pillLength(textW, hw, band) * e
             val rIn: Float
             val rOut: Float
@@ -202,12 +203,12 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
                 translate((if (left) W - x0 else x0) * kk, y0 * kk)
                 rotate(Math.toDegrees((if (left) ang else -ang).toDouble()).toFloat(), Offset.Zero)
             }) {
-                val lift = if (cap != null) -5f * kk else 0f
-                drawText(main, topLeft = Offset(0f, -main.size.height / 2f + lift), alpha = ta)
-                if (cap != null) drawText(cap, topLeft = Offset(0f, -cap.size.height / 2f + 7.5f * kk), alpha = ta)
+                // The caption sits after the label on the same line, small and spaced, like Elemental's eyebrows.
+                drawText(main, topLeft = Offset(0f, -main.size.height / 2f), alpha = ta)
+                if (cap != null) drawText(cap, topLeft = Offset(main.size.width + gap, -cap.size.height / 2f + .5f * kk), alpha = ta * .9f)
                 // Resting: a short rule under the label fills, as Elemental's rule under a title.
                 if (dwellOn) {
-                    val y = (if (cap != null) 12.5f else 8.5f) * kk
+                    val y = 8.5f * kk
                     val w = maxOf(main.size.width.toFloat(), 18f * kk) * dwell.value
                     drawLine(if (isHot) ink.copy(alpha = .7f) else onGlass.copy(alpha = .85f), Offset(0f, y), Offset(w, y),
                         strokeWidth = 1.4f * kk, cap = StrokeCap.Round, alpha = ta)
