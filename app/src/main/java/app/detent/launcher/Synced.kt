@@ -24,11 +24,17 @@ object Synced {
     /** Re-reads files/live/themes.json: one theme per live wallpaper, appended after the synced theme. */
     const val RELOAD_LIVE = "app.detent.launcher.RELOAD_LIVE"
     const val LIVE_GROUP = "live"
+    /** Sets the machines Detent syncs with over Tailscale: --es hosts "a.tailnet.ts.net b.tailnet.ts.net". */
+    const val SET_SYNC = "app.detent.launcher.SET_SYNC"
     /** Theme name to the wallpaper package file (in files/live) that Wallpaper Engine opens. */
     private val liveFiles = mutableMapOf<String, String>()
+    /** Theme name to the title Wallpaper Engine shows on the scene's tile. */
+    private val liveTitles = mutableMapOf<String, String>()
 
     fun liveFile(ctx: Context, t: ThemeDef): java.io.File? =
         liveFiles[t.name]?.let { java.io.File(java.io.File(ctx.filesDir, "live"), it) }?.takeIf { it.isFile }
+
+    fun liveTitle(t: ThemeDef): String? = liveTitles[t.name]
     private const val PREFS = "detent.synced"
 
     /** Listeners that redraw when the colours change. Called on the main thread. */
@@ -65,6 +71,7 @@ object Synced {
             THEMES.removeAt(THEMES.lastIndex); PALETTES.removeAt(PALETTES.lastIndex); THEME_NAMES.removeAt(THEME_NAMES.lastIndex)
         }
         liveFiles.clear()
+        liveTitles.clear()
         for (i in 0 until list.length()) {
             val o = list.optJSONObject(i) ?: continue
             val name = o.optString("name").takeIf { it.isNotBlank() } ?: continue
@@ -72,9 +79,15 @@ object Synced {
             val fg = parse(o.optString("fg")) ?: continue
             val acc = parse(o.optString("accent")) ?: continue
             val light = Color(bg).luminance() > 0.5f
-            val t = ThemeDef(name, LIVE_GROUP, light, bg, fg, acc, SYSTEM_WALL, blend(fg, bg, 0.3f))
+            val file = o.optString("file").takeIf { it.isNotBlank() && '/' !in it }
+            val pkg = file?.let { java.io.File(java.io.File(ctx.filesDir, "live"), it) }?.takeIf { it.isFile }
+            // The picker shows the scene's own still, so browsing live themes moves like the others.
+            val preview = pkg?.let { Mpkg.ensurePreview(it)?.path }
+            val t = ThemeDef(name, LIVE_GROUP, light, bg, fg, acc, SYSTEM_WALL, blend(fg, bg, 0.3f), preview = preview)
             THEMES += t; PALETTES += Palette(t); THEME_NAMES += name
-            o.optString("file").takeIf { it.isNotBlank() }?.let { liveFiles[name] = it }
+            file?.let { liveFiles[name] = it }
+            (o.optString("title").takeIf { it.isNotBlank() } ?: pkg?.let { Mpkg.open(it)?.project()?.title })
+                ?.let { liveTitles[name] = it }
         }
         for (t in imported) { THEMES += t; PALETTES += Palette(t); THEME_NAMES += t.name }
         return liveFiles.size
@@ -85,7 +98,10 @@ object Synced {
         val b = parse(bg) ?: return false
         val f = parse(fg) ?: return false
         val a = parse(accent) ?: return false
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+        val sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // Several machines may send the same colours; only a change redraws.
+        if (sp.getLong("bg", 0) == b && sp.getLong("fg", 0) == f && sp.getLong("accent", 0) == a) return true
+        sp.edit {
             putLong("bg", b)
             putLong("fg", f)
             putLong("accent", a)
@@ -125,6 +141,15 @@ class ColorsReceiver : BroadcastReceiver() {
             Synced.listeners.toList().forEach { it() }
             resultCode = 1
             resultData = "live themes: $n"
+            return
+        }
+        if (intent.action == Synced.SET_SYNC) {
+            val app = ctx.applicationContext
+            val n = TailnetSync.setHosts(app, intent.getStringExtra("hosts").orEmpty().split(' ', ',', '\n'))
+            TailnetSync.stop()
+            TailnetSync.start(app)
+            resultCode = if (n > 0) 1 else 0
+            resultData = "sync hosts: $n"
             return
         }
         if (intent.action != Synced.ACTION) return

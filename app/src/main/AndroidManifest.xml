@@ -66,6 +66,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="detent" android:host="import" />
             </intent-filter>
+            <!-- detent://sync?host=<machine>.<tailnet>.ts.net sets the machines to sync with. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="detent" android:host="sync" />
+            </intent-filter>
         </activity>
 
         <!-- Colours for the synced theme, sent from a desktop over adb. -->
@@ -76,6 +83,7 @@
             <intent-filter>
                 <action android:name="app.detent.launcher.SET_COLORS" />
                 <action android:name="app.detent.launcher.RELOAD_LIVE" />
+                <action android:name="app.detent.launcher.SET_SYNC" />
             </intent-filter>
         </receiver>
 
@@ -89,6 +97,20 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/live_paths" />
         </provider>
+
+        <!-- Applies a live theme's scene in Wallpaper Engine, so choosing the theme is enough. Off until the user turns it on. -->
+        <service
+            android:name=".WallpaperSwitch"
+            android:exported="true"
+            android:label="@string/wallpaper_switch_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/wallpaper_switch" />
+        </service>
 
         <service
             android:name=".UnreadService"

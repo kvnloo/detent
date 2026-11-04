@@ -255,6 +255,11 @@ private fun FeelRows(s: LauncherState, pal: Palette) {
                 { s.toggleTapOpens() }, pickOn(s.tapOpens) { s.toggleTapOpens() },
                 title = "tap off the dial", note = "on: opens the selected app. off: picks the row level with the tap")
         }
+        if (THEMES.any { it.group == app.detent.launcher.Synced.LIVE_GROUP }) Row(horizontalArrangement = gap) {
+            HoldChip("live switch · ${if (s.switchOn) "auto" else "one tap"}", s.switchOn, pal, listOf("settings"), 0,
+                { s.openSwitchSettings() }, { s.openSwitchSettings() },
+                title = "live switch", note = "on: choosing a live theme applies its scene in wallpaper engine for you")
+        }
         Row(horizontalArrangement = gap) {
             HoldChip("voice", s.voice, pal, ONOFF, if (s.voice) 0 else 1, { s.toggleVoice() }, pickOn(s.voice) { s.toggleVoice() },
                 title = "voice", note = "a mic button at the bottom of home")

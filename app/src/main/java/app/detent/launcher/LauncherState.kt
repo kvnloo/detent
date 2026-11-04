@@ -93,8 +93,21 @@ interface Host {
     /** Blurs what is behind the window (a live wallpaper) as [look] says, or stops blurring when null. */
     fun setGlassBlur(look: GlassLook?)
 
-    /** Hands a live wallpaper package to its wallpaper app, which asks to apply it. */
+    /**
+     * Switches to a live theme's scene. With the wallpaper switch on, Detent applies it itself; otherwise the
+     * wallpaper app opens and asks for one tap.
+     */
     fun openLiveWallpaper(theme: ThemeDef): Boolean
+
+    /** The package of the live wallpaper now set, or null for a still. */
+    fun liveWallpaperPackage(): String?
+
+    /** True when Detent's wallpaper switch (an accessibility service) is turned on. */
+    fun wallpaperSwitchOn(): Boolean
+    fun openWallpaperSwitchSettings()
+
+    /** Tells the owner's other machines that this phone chose [theme]. */
+    fun publishTheme(theme: String)
 
     fun launchApp(app: AppEntry, bounds: Rect?)
 
@@ -616,8 +629,15 @@ class LauncherState(
 
     // Activity hooks.
 
+    /** Detent's wallpaper switch is on, so live themes apply without a tap in Wallpaper Engine. */
+    var switchOn by mutableStateOf(false)
+        private set
+
+    fun openSwitchSettings() = host.openWallpaperSwitchSettings()
+
     fun onResume() {
         resumed = true
+        switchOn = host.wallpaperSwitchOn()
         now = System.currentTimeMillis()
         notifAccess = host.hasNotificationAccess()
         isHome = host.isDefaultHome()
@@ -1302,7 +1322,9 @@ class LauncherState(
         ob = n
         obSeq++
         if (n == null) {
+            val before = prefs.load()?.cfg?.theme
             persist()
+            if (before != cfg.theme) THEME_NAMES.getOrNull(cfg.theme)?.let { host.publishTheme(it) }
             host.cleanWallpapers(customWall)
             syncWallpaper()
             syncLive()
@@ -1312,11 +1334,26 @@ class LauncherState(
         run()
     }
 
+    /** Another device chose [name]: switch to it here too, unless the setup is open. */
+    fun followTheme(name: String, device: String) {
+        if (ob != null) return
+        val i = THEME_NAMES.indexOf(name).takeIf { it >= 0 } ?: return
+        if (i == cfg.theme) return
+        cfg = cfg.copy(theme = i)
+        persist()
+        syncWallpaper()
+        syncLive()
+        syncGlass()
+        showToast("$name · from ${device.lowercase()}")
+    }
+
     /** A live theme asks its wallpaper app to switch, once per change of theme. */
     private fun syncLive() {
         val t = THEMES[cfg.theme]
         val key = t.importId ?: t.name
-        if ((t.group != Synced.LIVE_GROUP && t.liveSource == null && t.mobilePackage == null) || prefs.appliedLive == key) return
+        if (t.group != Synced.LIVE_GROUP && t.liveSource == null && t.mobilePackage == null) return
+        // A still theme in between replaces the live wallpaper, so "already applied" only counts while it is still set.
+        if (prefs.appliedLive == key && host.liveWallpaperPackage() == WallpaperSwitch.WE_PACKAGE) return
         if (host.openLiveWallpaper(t) && (t.group == Synced.LIVE_GROUP || t.mobilePackage != null)) prefs.appliedLive = key
     }
 
@@ -1330,7 +1367,10 @@ class LauncherState(
         val key = "${THEMES[cfg.theme].name}|${cfg.side}|${if (grid) "grid" else custom ?: "theme"}"
         if (prefs.appliedWall == key) return
         host.setWallpaper(THEMES[cfg.theme], PALETTES[cfg.theme], left, custom, grid) { ok ->
-            if (ok) prefs.appliedWall = key else showToast("can't set the lock screen")
+            if (ok) {
+                prefs.appliedWall = key
+                prefs.appliedLive = null
+            } else showToast("can't set the lock screen")
         }
     }
 
