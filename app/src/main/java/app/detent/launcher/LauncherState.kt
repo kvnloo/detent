@@ -1124,12 +1124,15 @@ class LauncherState(
             // Holding another app's name acts on that app: it turns into the notch and its panes open.
             // Holding the bare rim or ticks keeps the letter jump.
             val named = if (kind == Kind.Radial) nameRowAt(d.x0, d.y0) else null
+            val before = pos.roundToInt()
             if (named == null) {
                 startScrub()
                 return
             }
             jumpTo(named.toFloat())
             followReadout()
+            // The finger stays on that name, now [named - before] rows off the notch: read it as on the header.
+            paneRowBias = named - before
         }
         if (kind == Kind.Lens) lsT = .5f
         target = pos.roundToInt().toFloat()
@@ -1880,6 +1883,9 @@ class LauncherState(
     private var paneDeepX = 0f
     private var paneSideArmed = false
 
+    /** Rows between the name that a hold opened the panes from and the notch it turned into. */
+    private var paneRowBias = 0
+
     /** True when the press-harder happened during the touch that is down now. */
     private var paneDeepTouch = false
 
@@ -1994,7 +2000,9 @@ class LauncherState(
 
     private fun paneTouch(x: Float, y: Float, pressure: Float) {
         val g = Geo(radius, cy, layout.ax)
-        val p = polar(mirX(x), y, g.cx, cy, g.step)
+        val raw = polar(mirX(x), y, g.cx, cy, g.step)
+        // While the opening hold is down, rows count from where it started, so holding still stays on the header.
+        val p = if (paneHolding && paneRowBias != 0) Polar(raw.dist, raw.rows - paneRowBias) else raw
         if (paneDeep && abs(x - paneDeepX) >= 12f) paneSideArmed = true
         // Expanding columns must not move a stationary finger onto a destructive side action.
         val hit = if (paneDeep && !paneSideArmed) {
@@ -2048,6 +2056,7 @@ class LauncherState(
     private fun paneUp(held: Boolean) {
         dwellJob?.cancel()
         paneHolding = false
+        paneRowBias = 0
         val hot = paneHot
         val slot = hot?.let { h -> paneSlots(if (paneDeep) 1f else 0f).firstOrNull { it.col == h.first && it.index == h.second } }
         deepPress.reset()
@@ -2069,6 +2078,7 @@ class LauncherState(
     private fun paneHeldEnd() {
         dwellJob?.cancel()
         paneHolding = false
+        paneRowBias = 0
         paneDeepTouch = false
         paneDwell = null
         deepPress.reset()

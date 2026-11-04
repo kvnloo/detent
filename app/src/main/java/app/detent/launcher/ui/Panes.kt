@@ -190,7 +190,9 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
             val main = measurer.measure(p.label, style.copy(color = color), overflow = TextOverflow.Ellipsis, maxLines = 1,
                 constraints = Constraints(maxWidth = maxW))
             val sub = p.sub.takeIf { it.isNotEmpty() && w > 44f }?.let {
-                measurer.measure(it, styles.sub, overflow = TextOverflow.Ellipsis, maxLines = 1, constraints = Constraints(maxWidth = maxW))
+                // On a lit lens the muted grey disappears into the accent; use the text colour, softened.
+                val subStyle = if (isHot) styles.sub.copy(color = pal.fg.copy(alpha = .78f)) else styles.sub
+                measurer.measure(it, subStyle, overflow = TextOverflow.Ellipsis, maxLines = 1, constraints = Constraints(maxWidth = maxW))
             }
             val ra = if (left) rIn + 14f else rOut - 14f
             val x0 = g.cx - ra * cos(ang)
