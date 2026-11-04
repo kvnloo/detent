@@ -81,18 +81,21 @@ on a debug build).
 
 ## Quick panes
 
-On a radial dial, each row has quick actions laid out as glass lenses, shaped like spectacle lenses and
-bent along the dial's own ring, one dial step per lens, beside the rim. The dial blurs behind them:
+On a radial dial, each row has quick actions laid out as glass pills along the dial's radii, one dial step
+per pill, beside the rim, in Elemental UI's glass: smoky frosted pills with a bright rim, each as long as
+its label, and the picked one solid and bright with dark ink. The wallpaper frosts and the dial blurs
+behind them. An app shows up to two notifications and four shortcuts (its top two actions, then its
+recent ones such as people and docs); a folder shows its apps, ending on "N more" when it has over six:
 
 - **Hold** the selected row: panes fan out (latest two notifications, then the app's shortcuts; a folder
   shows its apps). Keep the finger down and **slide up or down** to pick; let go to run it. Let go on the
   row itself and the panes stay open for taps.
-- **Hold any name**, not just the selected one: that row turns into the notch and its lenses open. Holding
+- **Hold any name**, not just the selected one: that row turns into the notch and its pills open. Holding
   the bare rim or ticks keeps the letter jump.
-- **Press harder** (or rest on a lens for 0.45 s; a ring fills along its edge) and the picked lens opens
+- **Press harder** (or rest on a pill for 0.45 s; a rule fills under its label) and the picked pill opens
   side options: over the dial and toward the screen edge. On the app's own name these are the edit
   options (move, tap action, swipe app, folder, info, remove). Slide sideways onto one and let go, or let
-  go on the pressed lens and the options stay open to tap.
+  go on the pressed pill and the options stay open to tap.
 - **Swipe sideways** on a row: away from the dial centre opens its panes; toward it runs the swipe app or
   opens the folder, as before.
 
