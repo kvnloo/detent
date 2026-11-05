@@ -273,6 +273,16 @@ private fun FeelRows(s: LauncherState, pal: Palette) {
                 title = "web search", note = "search the web from the app search")
         }
         Row(horizontalArrangement = gap) {
+            val options = listOf("add widget") + s.widgets.map { "remove ${it.name}" }
+            HoldChip(
+                if (s.widgets.isEmpty()) "add widget" else "widgets · ${s.widgets.size}",
+                s.widgets.isNotEmpty(), pal, options, 0,
+                { s.addWidget() },
+                { i -> if (i == 0) s.addWidget() else s.widgets.getOrNull(i - 1)?.let { s.removeWidget(it.id) } },
+                title = "home widgets", note = "tap to add · hold to remove",
+            )
+        }
+        Row(horizontalArrangement = gap) {
             Chip("export settings", false, pal, { s.exportSettings() })
             Chip("import settings", false, pal, { s.importSettings() })
         }

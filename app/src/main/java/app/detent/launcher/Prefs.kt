@@ -100,6 +100,19 @@ class Prefs(ctx: Context) {
         get() = sp.getString("customWall", null)?.takeIf { java.io.File(it).exists() }
         set(v) = sp.edit { putString("customWall", v) }
 
+    /** IDs allocated by Android's AppWidgetHost. Keep order and never persist invalid IDs. */
+    var widgetIds: List<Int>
+        get() = sp.getString("widgetIds", null)?.split(',')
+            ?.mapNotNull { it.toIntOrNull()?.takeIf { id -> id > 0 } }?.distinct().orEmpty()
+        set(v) = sp.edit { putString("widgetIds", v.filter { it > 0 }.distinct().joinToString(",")) }
+
+    /** An in-flight picker/bind/configuration survives activity recreation. */
+    var pendingWidgetId: Int?
+        get() = sp.getInt("pendingWidgetId", -1).takeIf { it > 0 }
+        set(v) = sp.edit {
+            if (v == null) remove("pendingWidgetId") else putInt("pendingWidgetId", v)
+        }
+
     /** The quick apps. Each line holds the app key, a tab, and the icon name. */
     var quick: List<QuickSlot>
         get() {

@@ -34,6 +34,7 @@ adb install detent.apk
 | Tap the dial while it turns | The dial stops. No app opens. |
 | Hold the dial | Letters replace the apps. Slide to a letter and release to jump to it. |
 | Hold the app in the notch | A menu shows the app shortcuts, `app info`, and `remove from dial`. |
+| Tap the clock | Opens the phone's Clock app (alarms). |
 | Hold the clock or an empty area | The setup opens: shape, theme, apps, and feel. |
 | Drag up from the bottom of the screen | Search all your apps. The drag starts on the row of the quick buttons. The `apps` hint marks the place. The 5 apps that you last opened from search sit at the top. Tap the cross on a recent app to remove it, or tap `clear`. Tap `+ dial` to add an app to the dial. |
 | Tap a quick button | Its app opens. If the corner has no quick app yet, pick one. |
@@ -56,6 +57,10 @@ With a hardware keyboard, `j` and `k` turn the dial. `l` or `Enter` opens the ap
   <img src="docs/media/themes.jpg" alt="Turn the dial to try a theme." width="49%">
   <img src="docs/media/search.jpg" alt="Search all apps and add one to the dial." width="49%">
 </p>
+
+## Home widgets
+
+Hold the clock or an empty area, choose `feel`, then tap `add widget`. Pick a widget in Android's picker, approve binding if prompted, and complete its setup if required. It appears below the clock, opposite the dial. To remove one, hold the `widgets` chip in `feel` and select the widget to remove. Widgets stay in place after restarting Detent; a widget's app must remain installed.
 
 ## Shapes and themes
 
