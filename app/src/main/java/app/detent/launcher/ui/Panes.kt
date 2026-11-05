@@ -38,6 +38,9 @@ import app.detent.launcher.Ease
 import app.detent.launcher.Geo
 import app.detent.launcher.GlassFx
 import app.detent.launcher.LauncherState
+import app.detent.launcher.PANE_FLIGHT_MS
+import app.detent.launcher.paneFlight
+import app.detent.launcher.QuickIcons
 import app.detent.launcher.PANE_DWELL
 import app.detent.launcher.pillHalf
 import app.detent.launcher.pillLength
@@ -69,6 +72,7 @@ fun panesVeil(s: LauncherState): Float {
 @Composable
 fun QuickPanes(s: LauncherState, pal: Palette) {
     val u = LocalUnits.current
+    val halo = LocalHalo.current
     var last by remember { mutableStateOf<QuickMenu?>(null) }
     s.menu?.let { if (it.panes != null) last = it }
     val shown = s.menuShown && s.menu?.panes != null
@@ -81,7 +85,16 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
         dwell.snapTo(0f)
         if (dwellKey != null) dwell.animateTo(1f, tween(PANE_DWELL.toInt(), easing = LinearEasing))
     }
-    if (last == null || (!shown && open <= .001f)) return
+    val lift = s.paneLift
+    val charge = remember(lift) { Animatable(0f) }
+    LaunchedEffect(lift) {
+        if (lift != null) charge.animateTo(1f, tween(500, easing = LinearEasing))
+    }
+    val flight = remember(lift) { Animatable(0f) }
+    LaunchedEffect(shown, lift) {
+        flight.animateTo(if (shown) 1f else 0f, tween(if (shown) PANE_FLIGHT_MS else 170, easing = LinearEasing))
+    }
+    if (lift == null && (last == null || (!shown && open <= .001f))) return
     val k by rememberUpdatedState(u.k)
     val fx = remember { GlassFx() }
     val measurer = rememberTextMeasurer(cacheSize = 64)
@@ -106,7 +119,7 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
 
     Canvas(
         Modifier.fillMaxSize()
-            .pointerInput(s) {
+            .then(if (!shown) Modifier else Modifier.pointerInput(s) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     down.consume()
@@ -125,7 +138,7 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
                         }
                     }
                 }
-            },
+            }),
     ) {
         // A light scrim; the wallpaper and dial blur behind (panesVeil), so the pills read without a dark veil.
         drawRect(pal.bg, alpha = open * (if (pal.light) .1f else .22f) * (1f + .3f * deep))
@@ -136,9 +149,12 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
         val cy = g.cy * kk
         val hw = pillHalf(g.step, s.radius + 14f)
         val hot = s.paneHot
+        val travel = paneFlight(flight.value)
         for (slot in s.paneSlots(deep)) {
+            // The held label owns the header throughout the transfer, never a fading replacement.
+            if (lift != null && slot.col == Col.Main && slot.index == -1) continue
             // Main pills grow out of the rim one after another; side pills grow out of their anchor.
-            val t = if (slot.col == Col.Main) (open * 1.6f - abs(slot.d) * .1f).coerceIn(0f, 1f)
+            val t = if (slot.col == Col.Main) (open * 1.6f - abs(slot.d) * .1f).coerceIn(0f, 1f) * travel
             else (deep * 1.5f - slot.index * .16f).coerceIn(0f, 1f)
             if (t <= .01f) continue
             val e = 1f - (1f - t) * (1f - t) * (1f - t)
@@ -220,8 +236,81 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
                 }
             }
         }
+        if (lift != null) {
+            val source = lift.pose
+            val iconOnly = lift.icon != null && QuickIcons.markOnly(lift.label)
+            val sourceColor = if (lift.selected) pal.accent else pal.fg
+            val sourceStyle = textStyle(u, 15f, sourceColor, if (lift.selected) FontWeight.Medium else FontWeight.Normal,
+                spacing = .01f, halo = halo)
+            val band = bandsForHeader(s.radius, deep)
+            // The dial draws the full label. Keep that exact shape at capture, then gradually
+            // constrain it to the header band during flight instead of popping into ellipsis.
+            val fullLabel = measurer.measure(lift.label, sourceStyle, maxLines = 1)
+            val headerWidth = ((band - hw * 2.2f) * kk).toInt().coerceAtLeast(1)
+            val width = (fullLabel.size.width * (1f - travel) + headerWidth * travel).toInt().coerceAtLeast(1)
+            val label = measurer.measure(lift.label, sourceStyle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                constraints = Constraints(maxWidth = width))
+            val tw = if (iconOnly) 14f * kk else label.size.width.toFloat()
+            val caption = s.menu?.panes?.head?.sub?.takeIf { it.isNotEmpty() }?.let {
+                measurer.measure(it.uppercase(), styles.caption, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, constraints = Constraints(maxWidth = (80f * kk).toInt()))
+            }
+            val targetLen = pillLength((tw + (caption?.let { it.size.width + 7f * kk } ?: 0f)) / kk, hw, band)
+            val sourceLen = pillLength(tw / kk, hw, maxOf(band, tw / kk + hw * 2.2f))
+            val len = sourceLen + (targetLen - sourceLen) * travel
+            val targetX = (if (left) W - (g.cx - (s.radius + 14f + hw)) else g.cx - (s.radius + 14f + len - hw)) * kk
+            val x = source.x * kk + (targetX - source.x * kk) * travel
+            val y = source.y * kk + (cy - source.y * kk) * travel
+            val rot = Math.toDegrees(source.rot.toDouble()).toFloat() * (1f - travel)
+            val scale = source.s + (1f - source.s) * travel
+            val tx = source.tx * (1f - travel)
+            val glass = (charge.value * .72f + flight.value * .28f).coerceIn(0f, 1f)
+            val heldInk = if (s.paneHot == (Col.Main to -1)) hotInk else onGlass
+            if (s.paneHot == (Col.Main to -1) && travel > .99f && deep < .5f) {
+                chevrons(g, s.radius + 8f, s.radius + 20f + len, 0f, left, onGlass, kk)
+            }
+            withTransform({
+                translate(x, y)
+                rotate(rot, Offset.Zero)
+                scale(scale, scale, Offset.Zero)
+            }) {
+                // Draw capsule around the original label before moving it along the flight path.
+                val inset = hw * kk
+                val start = tx * tw - inset
+                with(fx) {
+                    pill(start, 0f, 0f, len * kk, 0f, hw * kk,
+                        smoke.copy(alpha = smoke.alpha * glass), solid.copy(alpha = solid.alpha * glass),
+                        if (s.paneHot == (Col.Main to -1)) travel else 0f, rim.copy(alpha = rim.alpha * glass), kk)
+                }
+                if (s.paneHot == (Col.Main to -1) && deep < .5f && travel > .99f) {
+                    drawLine(hotInk.copy(alpha = .65f), Offset(0f, 9f * kk),
+                        Offset(maxOf(tw, 18f * kk) * dwell.value, 9f * kk), strokeWidth = 1.4f * kk, cap = StrokeCap.Round)
+                }
+                if (iconOnly) {
+                    // The dial positions icon-only folders beyond the text origin, not at it.
+                    val sourceIconX = if (source.tx < 0f) -20f * kk else 6f * kk
+                    val iconX = sourceIconX + (tx * tw - sourceIconX) * travel
+                    drawQuickIcon(lift.icon!!, androidx.compose.ui.graphics.lerp(sourceColor, heldInk, travel),
+                        Offset(iconX, -7f * kk), 14f * kk, 1.3f * kk)
+                } else {
+                    drawText(label, color = androidx.compose.ui.graphics.lerp(sourceColor, if (s.paneHot == (Col.Main to -1)) hotInk else onGlass, travel),
+                        topLeft = Offset(tx * tw, -label.size.height / 2f))
+                    lift.icon?.let { icon ->
+                        val ix = if (source.tx < 0f) -tw - 20f * kk else tw + 6f * kk
+                        drawQuickIcon(icon, androidx.compose.ui.graphics.lerp(sourceColor, onGlass, travel).copy(alpha = 1f - travel),
+                            Offset(ix, -7f * kk), 14f * kk, 1.3f * kk)
+                    }
+                }
+                if (caption != null && travel > 0f) {
+                    drawText(caption, color = heldInk.copy(alpha = .6f),
+                        topLeft = Offset(tw + 7f * kk, -caption.size.height / 2f), alpha = travel)
+                }
+            }
+        }
     }
 }
+
+private fun bandsForHeader(radius: Float, deep: Float) = app.detent.launcher.Bands(radius, deep).let { it.mainOut - it.mainIn }
 
 /** Small chevrons at both ends of the picked pill: it has options to each side. Radii in design units. */
 private fun DrawScope.chevrons(g: Geo, rIn: Float, rOut: Float, ang: Float, left: Boolean, color: Color, k: Float) {
