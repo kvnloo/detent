@@ -94,7 +94,7 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
     // The feel step has more rows of chips, the last one for settings export and import.
     val controlsY = u.navY - when {
         step == Step.FEEL && s.glassOpen -> 334f
-        step == Step.FEEL -> if (s.layout.grid) 280f else 328f
+        step == Step.FEEL -> if (s.layout.grid) 328f else 376f
         step == Step.SHAPE && s.customOpen -> 300f
         // Two rows of layout numbers.
         step == Step.SHAPE -> 216f
