@@ -94,7 +94,7 @@ fun Onboarding(s: LauncherState, pal: Palette, theme: ThemeDef) {
     // The feel step has more rows of chips, the last one for settings export and import.
     val controlsY = u.navY - when {
         step == Step.FEEL && s.glassOpen -> 334f
-        step == Step.FEEL -> if (s.layout.grid) 280f else 328f
+        step == Step.FEEL -> if (s.layout.grid) 328f else 376f
         step == Step.SHAPE && s.customOpen -> 300f
         // Two rows of layout numbers.
         step == Step.SHAPE -> 216f
@@ -271,6 +271,16 @@ private fun FeelRows(s: LauncherState, pal: Palette) {
             }
             HoldChip("web search", s.webSearch, pal, ONOFF, if (s.webSearch) 0 else 1, { s.toggleWebSearch() }, pickOn(s.webSearch) { s.toggleWebSearch() },
                 title = "web search", note = "search the web from the app search")
+        }
+        Row(horizontalArrangement = gap) {
+            val options = listOf("add widget") + s.widgets.map { "remove ${it.name}" }
+            HoldChip(
+                if (s.widgets.isEmpty()) "add widget" else "widgets · ${s.widgets.size}",
+                s.widgets.isNotEmpty(), pal, options, 0,
+                { s.addWidget() },
+                { i -> if (i == 0) s.addWidget() else s.widgets.getOrNull(i - 1)?.let { s.removeWidget(it.id) } },
+                title = "home widgets", note = "tap to add · hold to remove",
+            )
         }
         Row(horizontalArrangement = gap) {
             Chip("export settings", false, pal, { s.exportSettings() })

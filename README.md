@@ -34,6 +34,7 @@ adb install detent.apk
 | Tap the dial while it turns | The dial stops. No app opens. |
 | Hold the dial | Letters replace the apps. Slide to a letter and release to jump to it. |
 | Hold the app in the notch | A menu shows the app shortcuts, `app info`, and `remove from dial`. |
+| Tap the clock | Opens the phone's Clock app (alarms). |
 | Hold the clock or an empty area | The setup opens: shape, theme, apps, and feel. |
 | Drag up from the bottom of the screen | Search all your apps. The drag starts on the row of the quick buttons. The `apps` hint marks the place. The 5 apps that you last opened from search sit at the top. Tap the cross on a recent app to remove it, or tap `clear`. Tap `+ dial` to add an app to the dial. |
 | Tap a quick button | Its app opens. If the corner has no quick app yet, pick one. |
@@ -56,6 +57,10 @@ With a hardware keyboard, `j` and `k` turn the dial. `l` or `Enter` opens the ap
   <img src="docs/media/themes.jpg" alt="Turn the dial to try a theme." width="49%">
   <img src="docs/media/search.jpg" alt="Search all apps and add one to the dial." width="49%">
 </p>
+
+## Home widgets
+
+Hold the clock or an empty area, choose `feel`, then tap `add widget`. Pick a widget in Android's picker, approve binding if prompted, and complete its setup if required. It appears below the clock, opposite the dial. To remove one, hold the `widgets` chip in `feel` and select the widget to remove. Widgets stay in place after restarting Detent; a widget's app must remain installed.
 
 ## Shapes and themes
 
@@ -140,7 +145,7 @@ The `feel` step also has `export settings` and `import settings`. Export uses An
 
 The version 1 file stores the layout and theme **by name**, dial side, selected dial app keys, up to 3 quick buttons (app key and optional icon), recent search app keys, and the `sound`, `haptics`, `dots`, `lockWall`, `ownBar`, `voice`, and `webSearch` switches. The switches match the labels in the table above; `ownBar` means `detent bar`. Apps no longer installed on the phone are skipped. If the saved layout or theme is unavailable, Detent keeps the current one. Unknown file fields are ignored; unsupported file versions are rejected.
 
-The file does not include your wallpaper photo, Android permissions, notification history, app usage counts, or synced desktop theme colours. Import keeps the wallpaper photo already stored on this device. Notification dots still need notification access on the new phone.
+The file does not include your wallpaper photo, hosted widgets (these are bound to this phone by Android), Android permissions, notification history, app usage counts, or synced desktop theme colours. Import keeps the wallpaper photo already stored on this device. Notification dots still need notification access on the new phone.
 
 With the `detent bar`, drag down from the top of the home screen to open the notifications. A swipe from the top edge shows the Android status bar for a short time.
 

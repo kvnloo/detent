@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Widget binding is user-approved by Android; the picker/bind activities handle consent. -->
+    <uses-permission android:name="android.permission.BIND_APPWIDGET" tools:ignore="ProtectedPermissions" />
     <!-- Downloads only collections explicitly requested in the theme importer. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- The mic button. The microphone is on only while Detent listens. -->
