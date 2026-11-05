@@ -72,6 +72,7 @@ fun panesVeil(s: LauncherState): Float {
 @Composable
 fun QuickPanes(s: LauncherState, pal: Palette) {
     val u = LocalUnits.current
+    val halo = LocalHalo.current
     var last by remember { mutableStateOf<QuickMenu?>(null) }
     s.menu?.let { if (it.panes != null) last = it }
     val shown = s.menuShown && s.menu?.panes != null
@@ -238,16 +239,25 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
         if (lift != null) {
             val source = lift.pose
             val iconOnly = lift.icon != null && QuickIcons.markOnly(lift.label)
-            val sourceColor = if (source.s > 1f) pal.accent else pal.fg
-            val label = measurer.measure(lift.label, textStyle(u, 15f, sourceColor, if (source.s > 1f) FontWeight.Medium else FontWeight.Normal, spacing = .01f),
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                constraints = Constraints(maxWidth = ((bandsForHeader(s.radius, deep) - hw * 2.2f) * kk).toInt().coerceAtLeast(1)))
+            val sourceColor = if (lift.selected) pal.accent else pal.fg
+            val sourceStyle = textStyle(u, 15f, sourceColor, if (lift.selected) FontWeight.Medium else FontWeight.Normal,
+                spacing = .01f, halo = halo)
+            val band = bandsForHeader(s.radius, deep)
+            // The dial draws the full label. Keep that exact shape at capture, then gradually
+            // constrain it to the header band during flight instead of popping into ellipsis.
+            val fullLabel = measurer.measure(lift.label, sourceStyle, maxLines = 1)
+            val headerWidth = ((band - hw * 2.2f) * kk).toInt().coerceAtLeast(1)
+            val width = (fullLabel.size.width * (1f - travel) + headerWidth * travel).toInt().coerceAtLeast(1)
+            val label = measurer.measure(lift.label, sourceStyle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                constraints = Constraints(maxWidth = width))
             val tw = if (iconOnly) 14f * kk else label.size.width.toFloat()
             val caption = s.menu?.panes?.head?.sub?.takeIf { it.isNotEmpty() }?.let {
                 measurer.measure(it.uppercase(), styles.caption, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, constraints = Constraints(maxWidth = (80f * kk).toInt()))
             }
-            val len = pillLength((tw + (caption?.let { it.size.width + 7f * kk } ?: 0f)) / kk, hw, bandsForHeader(s.radius, deep))
+            val targetLen = pillLength((tw + (caption?.let { it.size.width + 7f * kk } ?: 0f)) / kk, hw, band)
+            val sourceLen = pillLength(tw / kk, hw, maxOf(band, tw / kk + hw * 2.2f))
+            val len = sourceLen + (targetLen - sourceLen) * travel
             val targetX = (if (left) W - (g.cx - (s.radius + 14f + hw)) else g.cx - (s.radius + 14f + len - hw)) * kk
             val x = source.x * kk + (targetX - source.x * kk) * travel
             val y = source.y * kk + (cy - source.y * kk) * travel
@@ -277,13 +287,18 @@ fun QuickPanes(s: LauncherState, pal: Palette) {
                         Offset(maxOf(tw, 18f * kk) * dwell.value, 9f * kk), strokeWidth = 1.4f * kk, cap = StrokeCap.Round)
                 }
                 if (iconOnly) {
-                    drawQuickIcon(lift.icon!!, heldInk, Offset(tx * tw, -7f * kk), 14f * kk, 1.3f * kk)
+                    // The dial positions icon-only folders beyond the text origin, not at it.
+                    val sourceIconX = if (source.tx < 0f) -20f * kk else 6f * kk
+                    val iconX = sourceIconX + (tx * tw - sourceIconX) * travel
+                    drawQuickIcon(lift.icon!!, androidx.compose.ui.graphics.lerp(sourceColor, heldInk, travel),
+                        Offset(iconX, -7f * kk), 14f * kk, 1.3f * kk)
                 } else {
                     drawText(label, color = androidx.compose.ui.graphics.lerp(sourceColor, if (s.paneHot == (Col.Main to -1)) hotInk else onGlass, travel),
                         topLeft = Offset(tx * tw, -label.size.height / 2f))
                     lift.icon?.let { icon ->
                         val ix = if (source.tx < 0f) -tw - 20f * kk else tw + 6f * kk
-                        drawQuickIcon(icon, onGlass.copy(alpha = 1f - travel), Offset(ix, -7f * kk), 14f * kk, 1.3f * kk)
+                        drawQuickIcon(icon, androidx.compose.ui.graphics.lerp(sourceColor, onGlass, travel).copy(alpha = 1f - travel),
+                            Offset(ix, -7f * kk), 14f * kk, 1.3f * kk)
                     }
                 }
                 if (caption != null && travel > 0f) {

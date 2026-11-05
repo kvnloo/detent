@@ -330,6 +330,7 @@ class LauncherState(
         private set
     var paneLift by mutableStateOf<PaneLift?>(null)
         private set
+    private var paneOpenedAt = -1L
 
     private fun capturePaneLift(row: Int): PaneLift? {
         val apps = dialApps
@@ -337,7 +338,7 @@ class LauncherState(
         val d = row - pos
         val scale = labelScale(abs(d), app.display.length)
         val p = labelPose(d, app.display.length, scale, Geo(radius, cy, layout.ax), layout.markers, left)
-        return PaneLift(app.key, app.display, rowIcon(app), Pose(p.x, p.y, p.rot, scale, p.tx))
+        return PaneLift(app.key, app.display, rowIcon(app), Pose(p.x, p.y, p.rot, scale, p.tx), paneSourceSelected(d))
     }
     var search by mutableStateOf(false)
         private set
@@ -1110,7 +1111,10 @@ class LauncherState(
     fun onCancel() {
         cancelPress()
         clearSwipe()
-        if (drag?.panes == true) paneHeldEnd()
+        if (drag?.panes == true) {
+            paneHeldEnd()
+            closeMenu() // Cancelled touch reverses the transfer rather than leaving orphaned panes.
+        }
         lift = 0f
         val d = drag ?: return
         drag = null
@@ -1860,6 +1864,7 @@ class LauncherState(
     private fun openMenu() {
         val app = curApp() ?: return
         if (kind == Kind.Radial && paneLift?.key != app.key) paneLift = capturePaneLift(pos.roundToInt())
+        paneOpenedAt = if (kind == Kind.Radial && paneLift != null) SystemClock.uptimeMillis() else -1L
         val shortcuts = repo.shortcuts(app, 4)
         menu = QuickMenu(app, shortcuts, panes = if (kind == Kind.Radial) paneSet(app, shortcuts) else null)
         menuShown = true
@@ -1884,6 +1889,7 @@ class LauncherState(
         if (menu == null) return
         if (menu?.panes != null && seeThrough) syncGlass()
         menuShown = false
+        paneOpenedAt = -1L
         paneHot = null
         paneDeep = false
         paneDwell = null
@@ -2127,6 +2133,12 @@ class LauncherState(
 
     /** The finger left the panes. After the opening hold, letting go on the header keeps them open. */
     private fun paneUp(held: Boolean) {
+        // Release during capture-to-header flight is a cancellation, never an action.
+        if (held && paneLift != null && paneFlightInterrupted(paneOpenedAt, SystemClock.uptimeMillis())) {
+            paneHeldEnd()
+            closeMenu()
+            return
+        }
         dwellJob?.cancel()
         paneHolding = false
         paneRowBias = 0
