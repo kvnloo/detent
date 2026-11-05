@@ -145,7 +145,7 @@ The `feel` step also has `export settings` and `import settings`. Export uses An
 
 The version 1 file stores the layout and theme **by name**, dial side, selected dial app keys, up to 3 quick buttons (app key and optional icon), recent search app keys, and the `sound`, `haptics`, `dots`, `lockWall`, `ownBar`, `voice`, and `webSearch` switches. The switches match the labels in the table above; `ownBar` means `detent bar`. Apps no longer installed on the phone are skipped. If the saved layout or theme is unavailable, Detent keeps the current one. Unknown file fields are ignored; unsupported file versions are rejected.
 
-The file does not include your wallpaper photo, Android permissions, notification history, app usage counts, or synced desktop theme colours. Import keeps the wallpaper photo already stored on this device. Notification dots still need notification access on the new phone.
+The file does not include your wallpaper photo, hosted widgets (these are bound to this phone by Android), Android permissions, notification history, app usage counts, or synced desktop theme colours. Import keeps the wallpaper photo already stored on this device. Notification dots still need notification access on the new phone.
 
 With the `detent bar`, drag down from the top of the home screen to open the notifications. A swipe from the top edge shows the Android status bar for a short time.
 
