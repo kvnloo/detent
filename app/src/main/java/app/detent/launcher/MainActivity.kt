@@ -190,6 +190,8 @@ class MainActivity : ComponentActivity(), Host {
     override fun openAssistant(pkg: String): Boolean =
         open(Intent(Intent.ACTION_ASSIST).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 
+    override fun z0live(action: String): Boolean = open(Z0Live.command(action))
+
     override fun setGlassBlur(look: GlassLook?) {
         if (Build.VERSION.SDK_INT < 31) return
         val on = look != null && windowManager.isCrossWindowBlurEnabled
@@ -456,6 +458,8 @@ class MainActivity : ComponentActivity(), Host {
         startActivity(intent)
         true
     } catch (e: ActivityNotFoundException) {
+        false
+    } catch (e: SecurityException) {
         false
     }
 }

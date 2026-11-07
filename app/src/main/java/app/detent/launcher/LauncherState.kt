@@ -90,6 +90,9 @@ interface Host {
     /** Opens an assistant app's own voice entry. False when it can't be opened. */
     fun openAssistant(pkg: String): Boolean
 
+    /** Sends a z0live call command ([Z0Live.MUTE] or [Z0Live.END]). False when the companion isn't installed. */
+    fun z0live(action: String): Boolean
+
     /** Blurs what is behind the window (a live wallpaper) as [look] says, or stops blurring when null. */
     fun setGlassBlur(look: GlassLook?)
 
@@ -478,6 +481,11 @@ class LauncherState(
     fun setMic(pkg: String?) {
         micApp = pkg
         prefs.micApp = pkg
+    }
+
+    /** Mutes or ends the z0live call from a hold on the voice button. A missing companion only shows a toast. */
+    fun liveCall(action: String) {
+        if (!host.z0live(action)) showToast("z0live isn't installed")
     }
 
     fun micLabel(): String = micApp?.let { p -> host.assistants().firstOrNull { it.first == p }?.second ?: p } ?: "detent"
