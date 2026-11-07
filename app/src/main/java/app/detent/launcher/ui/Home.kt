@@ -89,6 +89,7 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
@@ -125,6 +126,7 @@ import app.detent.launcher.ThemeDef
 import app.detent.launcher.handMatrix
 import app.detent.launcher.wallpaperDirection
 import app.detent.launcher.W
+import app.detent.launcher.Z0Live
 import app.detent.launcher.mod
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -226,10 +228,8 @@ private fun Home(s: LauncherState) {
         AppsHint(s, pal)
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - .75f * veil }) { CornerButtons(s, pal) }
         HearLayer(s, pal)
-        if (s.ob != null) {
-            Onboarding(s, pal, THEMES[live])
-            HoldCards(pal)
-        }
+        if (s.ob != null) Onboarding(s, pal, THEMES[live])
+        HoldCards(pal)
         ModePill(s, pal)
         QuickMenuView(s, pal)
         QuickPanes(s, pal)
@@ -550,20 +550,50 @@ private fun WebButton(s: LauncherState, pal: Palette, idle: Boolean) {
     }
 }
 
-/** The voice button. Say the name of an app to open it. */
+/** The voice button. Say the name of an app to open it. Hold it to mute or end a z0live call. */
 @Composable
 private fun VoiceButton(s: LauncherState, pal: Palette, idle: Boolean) {
     val u = LocalUnits.current
+    val host = LocalHold.current
     // The centre of the button in design units.
     var centre by remember { mutableStateOf(Offset.Zero) }
+    var anchor by remember { mutableStateOf(Rect.Zero) }
+    val calls = listOf("mute" to Z0Live.MUTE, "end call" to Z0Live.END)
     Box(
         Modifier.size(u.dp(44f)).clip(CircleShape).background(pal.btnBg).border(u.dp(1f), pal.rim2, CircleShape)
             .onGloballyPositioned {
                 val p = it.positionInRoot()
                 centre = Offset((p.x + it.size.width / 2f) / u.k, (p.y + it.size.height / 2f) / u.k)
+                anchor = it.boundsInRoot()
             }
             .semantics { contentDescription = "voice" }
-            .tap(enabled = idle) { s.voiceTap(centre.x, centre.y) },
+            .then(
+                if (!idle) Modifier
+                else Modifier.holdable(
+                    host?.fb, { s.voiceTap(centre.x, centre.y) },
+                    // Hold reveals the call commands; nothing is sent until the finger lifts on one.
+                    onHold = { host ?: return@holdable; host.fb.pop(); host.open(pickCard(host, u, anchor, "live call", null, calls.map { it.first }, -1)) },
+                    onMove = { p ->
+                        val c = host?.card as? PickCard ?: return@holdable
+                        val i = c.optionAt(p)
+                        if (i != c.hi) {
+                            c.hi = i
+                            if (i >= 0) host.fb.hover()
+                        }
+                    },
+                    onUp = { p ->
+                        val c = host?.card as? PickCard ?: return@holdable
+                        val i = c.optionAt(p)
+                        host.close(i >= 0)
+                        if (i >= 0) {
+                            host.fb.settle()
+                            s.liveCall(calls[i].second)
+                        } else {
+                            host.fb.letGo()
+                        }
+                    },
+                ),
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(u.dp(14f))) {
