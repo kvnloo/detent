@@ -126,6 +126,12 @@ interface Host {
     fun showAppInfo(app: AppEntry, bounds: Rect?)
     fun isDefaultHome(): Boolean
     fun requestHome()
+    /** Opens the phone's default clock without changing the launcher's long-press gesture. */
+    fun openClock(): Boolean
+    fun currentWidgets(): List<LauncherWidget>
+    fun addWidget(): Boolean
+    fun removeWidget(id: Int)
+    fun widgetView(id: Int): android.view.View
     fun hasNotificationAccess(): Boolean
     fun openNotificationAccess()
     fun is24Hour(): Boolean
@@ -345,6 +351,10 @@ class LauncherState(
 
     /** The quick apps, at most [QUICK_MAX]. The first one sits next to the mic button. */
     var quick by mutableStateOf(prefs.quick)
+        private set
+
+    /** The hosted widgets are independent of the dial and survive a launcher restart. */
+    var widgets by mutableStateOf(host.currentWidgets())
         private set
 
     /** The installed quick apps in slot order. */
@@ -642,6 +652,23 @@ class LauncherState(
         private set
 
     fun openSwitchSettings() = host.openWallpaperSwitchSettings()
+
+    fun refreshWidgets() { widgets = host.currentWidgets() }
+    fun addWidget() {
+        tap()
+        if (!host.addWidget()) showToast("no widget picker available")
+    }
+    fun removeWidget(id: Int) {
+        tap()
+        host.removeWidget(id)
+        refreshWidgets()
+    }
+    fun widgetView(id: Int): android.view.View = host.widgetView(id)
+    fun openClock() {
+        if (ob != null || hear != null) return
+        tap()
+        if (!host.openClock()) showToast("can't open the clock")
+    }
 
     fun onResume() {
         resumed = true
@@ -1178,7 +1205,20 @@ class LauncherState(
         run()
     }
 
+    /** Only taps on the visible time (not the surrounding wallpaper) open Clock. Holds keep going through onDown/longPress. */
+    private fun isClockTap(x: Float, y: Float): Boolean {
+        if (ob != null || hear != null || readName || scrub != null) return false
+        if (layout.grid) return x in (RX - 8f)..(RX + (RC - 1) * RF + 8f) &&
+            y in (readY - 8f)..(readY + (RR - 1) * RF + 10f)
+        val fromClockSide = if (left) W - x else x
+        return fromClockSide in 28f..304f && y in (clockTop - 8f)..(clockTop + 104f)
+    }
+
     private fun tapAt(x: Float, y: Float) {
+        if (isClockTap(x, y)) {
+            openClock()
+            return
+        }
         if (kind == Kind.Lens) {
             if (!onLens(x, y)) return
             val k = lensRowAt(y)

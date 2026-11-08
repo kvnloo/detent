@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity(), Host {
     private val scope = CoroutineScope(SupervisorJob() + AndroidUiDispatcher.Main)
     private lateinit var repo: AppsRepository
     private lateinit var state: LauncherState
+    private lateinit var widgets: LauncherWidgets
     private val launcherApps by lazy { getSystemService(LauncherApps::class.java) }
     private val roleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         state.refreshSystem()
@@ -125,13 +126,20 @@ class MainActivity : ComponentActivity(), Host {
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         window.setBackgroundDrawableResource(android.R.color.transparent)
         repo = AppsRepository(applicationContext)
-        state = LauncherState(this, repo, Prefs(applicationContext), Feedback(applicationContext), scope)
+        val prefs = Prefs(applicationContext)
+        widgets = LauncherWidgets(this, prefs, { state.refreshWidgets() }, { state.showToast(it) })
+        state = LauncherState(this, repo, prefs, Feedback(applicationContext), scope)
         repo.start()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = state.back()
         })
         setContent { DetentRoot(state) }
         receiveThemeLink(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        widgets.start()
     }
 
     override fun onResume() {
@@ -148,6 +156,7 @@ class MainActivity : ComponentActivity(), Host {
     }
 
     override fun onStop() {
+        widgets.stop()
         super.onStop()
         state.onStop()
         TailnetSync.stop()
@@ -288,6 +297,12 @@ class MainActivity : ComponentActivity(), Host {
 
     override fun showAppInfo(app: AppEntry, bounds: Rect?) =
         launcherApps.startAppDetailsActivity(app.component, app.user, bounds, reveal(bounds))
+
+    override fun openClock(): Boolean = ClockIntents.open(this)
+    override fun currentWidgets(): List<LauncherWidget> = widgets.entries()
+    override fun addWidget(): Boolean = widgets.add()
+    override fun removeWidget(id: Int) = widgets.remove(id)
+    override fun widgetView(id: Int): android.view.View = widgets.view(id)
 
     override fun isDefaultHome(): Boolean =
         getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_HOME) == true

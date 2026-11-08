@@ -18,6 +18,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,6 +38,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -105,6 +108,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -222,6 +226,7 @@ private fun Home(s: LauncherState) {
                 DialCanvas(s, pal, wave)
             }
         }
+        WidgetShelf(s, pal)
         // The readout layout shows the letter in its readout.
         if (s.kind != Kind.Readout) ScrubLetter(s, pal)
         PressRing(s, pal)
@@ -422,6 +427,34 @@ private fun GestureLayer(s: LauncherState) {
 }
 
 // Home elements.
+
+/** Widgets live in the clear space opposite the dial. The native RemoteViews remain clickable. */
+@Composable
+private fun WidgetShelf(s: LauncherState, pal: Palette) {
+    if (s.widgets.isEmpty() || s.ob != null || s.search || s.hear != null || s.open != null) return
+    val u = LocalUnits.current
+    val height = (u.buttonY - u.clockTop - 190f).coerceAtLeast(120f)
+    Box(
+        Modifier.fillMaxWidth().place(u, 0f, u.clockTop + 148f)
+            .padding(horizontal = u.dp(24f)),
+    ) {
+        Column(
+            Modifier.align(if (s.left) Alignment.TopEnd else Alignment.TopStart)
+                .width(u.dp(248f)).heightIn(max = u.dp(height)).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(u.dp(10f)),
+        ) {
+            for (widget in s.widgets) key(widget.id) {
+                val shape = RoundedCornerShape(u.dp(14f))
+                Box(
+                    Modifier.fillMaxWidth().height(u.dp(158f)).clip(shape)
+                        .background(pal.btnBg).border(u.dp(1f), pal.rim2, shape),
+                ) {
+                    AndroidView(factory = { s.widgetView(widget.id) }, modifier = Modifier.fillMaxSize())
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun Clock(s: LauncherState, pal: Palette) {
