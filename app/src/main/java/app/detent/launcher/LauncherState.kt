@@ -126,6 +126,7 @@ interface Host {
     fun hasNotificationAccess(): Boolean
     fun openNotificationAccess()
     fun is24Hour(): Boolean
+    fun openClock(): Boolean = false
 
     /** Starts the speech input of the phone. Calls [done] with what it heard, best guess first. Returns false when the phone has no speech input. */
     fun listen(done: (List<String>) -> Unit): Boolean
@@ -220,6 +221,7 @@ class LauncherState(
     var k = 1f
     var hd = H0
     var clockTop = 84f
+    var clockBounds: Rect? = null
     var buttonY = 796f
     val cy get() = layout.cy(hd)
 
@@ -1170,7 +1172,15 @@ class LauncherState(
         run()
     }
 
+    fun openClock() {
+        if (!host.openClock()) showToast("no clock app available")
+    }
+
     private fun tapAt(x: Float, y: Float) {
+        if (ob == null && hear == null && !layout.grid && clockBounds?.contains((x * k).toInt(), (y * k).toInt()) == true) {
+            openClock()
+            return
+        }
         if (kind == Kind.Lens) {
             if (!onLens(x, y)) return
             val k = lensRowAt(y)

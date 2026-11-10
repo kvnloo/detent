@@ -139,7 +139,7 @@ internal val MONTHS = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "a
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DetentRoot(s: LauncherState) {
+fun DetentRoot(s: LauncherState, widgets: app.detent.launcher.Widgets? = null) {
     val base = LocalDensity.current
     // The dial geometry is fixed. A font scale of 1 keeps text sizes in design units.
     CompositionLocalProvider(LocalDensity provides Density(base.density, 1f)) {
@@ -162,7 +162,12 @@ fun DetentRoot(s: LauncherState) {
             val halo = if (s.seeThrough) PALETTES[s.cfg.theme].bg.copy(alpha = .7f) else null
             val hold = remember { HoldHost(s.haptic) }
             hold.screenW = constraints.maxWidth.toFloat()
-            CompositionLocalProvider(LocalUnits provides u, LocalHalo provides halo, LocalHold provides hold) { Home(s) }
+            CompositionLocalProvider(LocalUnits provides u, LocalHalo provides halo, LocalHold provides hold) {
+                Box(Modifier.fillMaxSize()) {
+                    Home(s)
+                    if (widgets != null) WidgetPanel(widgets, s)
+                }
+            }
         }
     }
 }
@@ -448,6 +453,13 @@ private fun Clock(s: LauncherState, pal: Palette) {
     if (hear < .996f) {
         SideBox(s.left, u.clockTop, 28f, Modifier.graphicsLayer { this.alpha = alpha * (1 - hear) }) {
             Column(
+                modifier = Modifier.onGloballyPositioned {
+                    val p = it.positionInRoot()
+                    s.clockBounds = android.graphics.Rect(p.x.toInt(), p.y.toInt(), (p.x + it.size.width).toInt(), (p.y + it.size.height).toInt())
+                }.semantics {
+                    contentDescription = "open clock"
+                    onClick { s.openClock(); true }
+                },
                 horizontalAlignment = if (s.left) Alignment.End else Alignment.Start,
                 verticalArrangement = Arrangement.spacedBy(u.dp(6f)),
             ) {

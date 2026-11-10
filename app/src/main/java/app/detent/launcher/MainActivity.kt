@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity(), Host {
     private val scope = CoroutineScope(SupervisorJob() + AndroidUiDispatcher.Main)
     private lateinit var repo: AppsRepository
     private lateinit var state: LauncherState
+    private val widgets by lazy { Widgets(this) }
     private val launcherApps by lazy { getSystemService(LauncherApps::class.java) }
     private val roleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         state.refreshSystem()
@@ -124,14 +125,22 @@ class MainActivity : ComponentActivity(), Host {
         // Lets a live wallpaper show behind the synced theme. Other themes paint over it.
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         window.setBackgroundDrawableResource(android.R.color.transparent)
+        widgets.host
         repo = AppsRepository(applicationContext)
         state = LauncherState(this, repo, Prefs(applicationContext), Feedback(applicationContext), scope)
         repo.start()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() = state.back()
+            override fun handleOnBackPressed() {
+                if (widgets.shown) widgets.shown = false else state.back()
+            }
         })
-        setContent { DetentRoot(state) }
+        setContent { DetentRoot(state, widgets) }
         receiveThemeLink(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        widgets.host.startListening()
     }
 
     override fun onResume() {
@@ -150,6 +159,7 @@ class MainActivity : ComponentActivity(), Host {
     override fun onStop() {
         super.onStop()
         state.onStop()
+        widgets.host.stopListening()
         TailnetSync.stop()
     }
 
@@ -157,6 +167,7 @@ class MainActivity : ComponentActivity(), Host {
         super.onNewIntent(intent)
         val home = intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)
         val alreadyHome = hasWindowFocus() && intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT == 0
+        if (home) widgets.shown = false
         if (home && alreadyHome) state.onHome()
         receiveThemeLink(intent)
     }
@@ -179,6 +190,9 @@ class MainActivity : ComponentActivity(), Host {
         state.openThemeImport(link)
         setIntent(Intent(Intent.ACTION_MAIN))
     }
+
+    override fun openClock(): Boolean =
+        open(Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS))
 
     override fun assistants(): List<Pair<String, String>> = packageManager
         .queryIntentActivities(Intent(Intent.ACTION_ASSIST), 0)
